@@ -1,6 +1,5 @@
-// Copyright (c) 2023 Franka Robotics GmbH
-// Use of this source code is governed by the Apache-2.0 license,
-// see LICENSE.apache-2.0
+// Copyright (c) 2017 Franka Emika GmbH
+// Use of this source code is governed by the Apache-2.0 license, see LICENSE
 #include "examples_common.h"
 
 #include <algorithm>
@@ -117,7 +116,7 @@ franka::JointPositions MotionGenerator::operator()(const franka::RobotState& rob
   time_ += period.toSec();
 
   if (time_ == 0.0) {
-    q_start_ = Vector7d(robot_state.q.data());
+    q_start_ = Vector7d(robot_state.q_d.data());
     delta_q_ = q_goal_ - q_start_;
     calculateSynchronizedValues();
   }

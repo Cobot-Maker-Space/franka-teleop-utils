@@ -1,6 +1,5 @@
-// Copyright (c) 2023 Franka Robotics GmbH
-// Use of this source code is governed by the Apache-2.0 license,
-// see LICENSE.apache-2.0
+// Copyright (c) 2017 Franka Emika GmbH
+// Use of this source code is governed by the Apache-2.0 license, see LICENSE
 #include <array>
 #include <atomic>
 #include <cmath>
@@ -28,11 +27,6 @@ std::ostream& operator<<(std::ostream& ostream, const std::array<T, N>& array) {
   return ostream;
 }
 }  // anonymous namespace
-
-/**
- * Adapted from 'joint_impedance_control.cpp' from libfranka examples.
- * https://github.com/frankaemika/libfranka
- */
 
 /**
  * @example joint_impedance_control.cpp
@@ -169,10 +163,10 @@ int main(int argc, char** argv) {
       pose_desired.O_T_EE[14] += delta_z;
 
       // Send desired pose.
-      if (time >= run_time + acceleration_time) {
+      /*if (time >= run_time + acceleration_time) {
         running = false;
         return franka::MotionFinished(pose_desired);
-      }
+      }*/
 
       return pose_desired;
     };
@@ -216,7 +210,8 @@ int main(int argc, char** argv) {
       }
 
       // Send torque command.
-      return tau_d_rate_limited;
+      //return tau_d_rate_limited;
+      return std::array<double, 7>{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
     };
 
     // Start real-time control loop.

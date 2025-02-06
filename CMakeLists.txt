@@ -17,4 +17,5 @@ link_libraries(Eigen3::Eigen Franka::Franka Threads::Threads)
 
 add_library(examples_common src/examples_common.cpp)
 
-add_executable(recorder src/recorder_new.cpp)
+add_executable(recorder src/recorder.cpp)
+target_link_libraries(recorder examples_common)
