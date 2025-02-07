@@ -41,7 +41,6 @@ namespace {
 }
 
 int main(int argc, const char** argv) {
-  std::signal(SIGINT, signal_handler);
 
   const double rate = 10.0; // TODO: Should be an optional command line argument
 
@@ -68,7 +67,6 @@ int main(int argc, const char** argv) {
 
   std::atomic_bool running{ true };
   stop = [&running](int signum) -> void { running = false; };
-  signal(SIGINT, &signal_handler);
 
   std::thread write_thread([rate, &robot_data, &message, &running]() {
     while (running) {
@@ -98,9 +96,16 @@ int main(int argc, const char** argv) {
       { {20.0, 20.0, 20.0, 25.0, 25.0, 25.0} },
       { {20.0, 20.0, 20.0, 25.0, 25.0, 25.0} });
 
+    const franka::Torques torques = franka::Torques(
+      std::array<double, 7>{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}});
+
     std::function<franka::Torques(const franka::RobotState&, franka::Duration)>
-      control_callback = [&robot_data](
+      control_callback = [&robot_data, &running, &torques](
         const franka::RobotState& state, franka::Duration) -> franka::Torques {
+          if (!running) {
+            return franka::MotionFinished(torques);
+          }
+
           if (robot_data.lock.try_lock()) {
             robot_data.updated = true;
             robot_data.state_builder.setTime(state.time.toMSec());
@@ -120,12 +125,13 @@ int main(int argc, const char** argv) {
             robot_data.state_builder.setJoint7Vel(state.dq[6]);
             robot_data.lock.unlock();
           }
-          return std::array<double, 7>{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+          return torques;
       };
 
-    std::cout << "Robot is ready, press Enter to begin." << std::endl;
+    std::cout << "Robot is ready, press Enter to start." << std::endl;
     std::cin.ignore();
-
+    std::signal(SIGINT, signal_handler);
+    std::cout << "Robot running, press CTRL-c to stop." << std::endl;
     robot.control(control_callback);
 
   }
