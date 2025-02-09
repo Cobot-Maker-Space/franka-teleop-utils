@@ -40,16 +40,19 @@ namespace {
   void signal_handler(int signal) { stop(signal); }
 }
 
-int main(int argc, const char** argv) {
+/*
+ * Message publishing rate (Hz)
+ */
+const double rate = 10.0; // TODO: Should be an optional command line argument
 
-  const double rate = 10.0; // TODO: Should be an optional command line argument
+int main(int argc, const char** argv) {
 
   if (argc != 3) {
     std::cerr << "Usage: " << argv[0] << " <robot_ip> <filename>" << std::endl;
     return -1;
   }
 
-  ::capnp::MallocMessageBuilder message;
+  capnp::MallocMessageBuilder message;
   struct {
     std::mutex lock;
     int outfile;
@@ -68,7 +71,7 @@ int main(int argc, const char** argv) {
   std::atomic_bool running{ true };
   stop = [&running](int signum) -> void { running = false; };
 
-  std::thread write_thread([rate, &robot_data, &message, &running]() {
+  std::thread write_thread([&robot_data, &message, &running]() {
     while (running) {
       std::this_thread::sleep_for(
         std::chrono::milliseconds(static_cast<int>((1.0 / rate * 1000.0))));
