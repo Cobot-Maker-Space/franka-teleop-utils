@@ -55,15 +55,15 @@ int main(int argc, const char** argv) {
   capnp::MallocMessageBuilder message;
   struct {
     std::mutex lock;
-    int outfile;
     RobotState::Builder state_builder;
     bool updated;
   } robot_data{
     .state_builder = message.initRoot<RobotState>()
   };
 
+  int outfile;
   mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP;
-  if (robot_data.outfile = open(argv[2], O_WRONLY | O_CREAT, mode) == -1) {
+  if (outfile = open(argv[2], O_WRONLY | O_CREAT, mode) == -1) {
     std::cerr << "Unable to open file " << argv[2] << " for writing." << std::endl;
     return -1;
   }
@@ -71,13 +71,13 @@ int main(int argc, const char** argv) {
   std::atomic_bool running{ true };
   stop = [&running](int signum) -> void { running = false; };
 
-  std::thread write_thread([&robot_data, &message, &running]() {
+  std::thread write_thread([&message, &robot_data, outfile, &running]() {
     while (running) {
       std::this_thread::sleep_for(
         std::chrono::milliseconds(static_cast<int>((1.0 / rate * 1000.0))));
       if (robot_data.lock.try_lock()) {
         if (robot_data.updated) {
-          capnp::writeMessageToFd(robot_data.outfile, message);
+          capnp::writeMessageToFd(outfile, message);
           robot_data.updated = false;
         }
         robot_data.lock.unlock();
@@ -148,7 +148,7 @@ int main(int argc, const char** argv) {
     write_thread.join();
   }
 
-  if (close(robot_data.outfile) == -1) {
+  if (close(outfile) == -1) {
     std::cerr
       << "There was an error closing the output file, some data may be missing."
       << std::endl;
