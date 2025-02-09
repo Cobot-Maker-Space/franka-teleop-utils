@@ -97,9 +97,11 @@ int main(int argc, const char** argv) {
 				if (robot_data.updated) {
 					MemoryOutputStream os(buffer);
 					capnp::writeMessage(os, message);
-					sendto(sock, buffer, os.getSize(), MSG_CONFIRM,
-						(const struct sockaddr*)&addr, addr_len);
-						robot_data.updated = false;
+					if (sendto(sock, buffer, os.getSize(), MSG_CONFIRM,
+						(const struct sockaddr*)&addr, addr_len) < 0) {
+						std::cerr << "An error occurred during message transmission" << std::endl;
+					}
+					robot_data.updated = false;
 				}
 				robot_data.lock.unlock();
 			}
