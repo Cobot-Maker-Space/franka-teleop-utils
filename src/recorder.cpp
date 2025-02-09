@@ -18,12 +18,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <array>
 #include <atomic>
 #include <csignal>
-#include <fcntl.h>
 #include <functional>
 #include <iostream>
 #include <mutex>
-#include <sys/stat.h>
 #include <thread>
+
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <franka/exception.h>
