@@ -32,7 +32,12 @@ target_link_libraries(
   ${CAPNP_LIBRARIES}
   Threads::Threads)
 
-add_executable(leader src/leader.cpp ${CAPNP_SRCS} ${CAPNP_HDRS})
+add_executable(
+  leader
+  src/leader.cpp
+  src/ioutils.cpp
+  ${CAPNP_SRCS}
+  ${CAPNP_HDRS})
 target_link_libraries(
   leader
   ${CAPNP_LIBRARIES}
