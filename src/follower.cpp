@@ -73,7 +73,11 @@ int main(int argc, const char** argv) {
   std::atomic_bool running{ true };
   stop = [&running](int signum) -> void { running = false; };
 
-  std::thread receive_thread([argv, &message, &robot_data, sock, &running]() {
+  std::array<double, 7> current_leader_position = {0, 0, 0, 0, 0, 0, 0};
+  std::array<double, 7> current_leader_velocity = {0, 0, 0, 0, 0, 0, 0};
+  double last_received_time = 0.0;
+
+  std::thread receive_thread([argv, &message, &robot_data, sock, &running, &last_received_time, &current_follower_position]() {
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -117,17 +121,39 @@ int main(int argc, const char** argv) {
       // TODO: Check state time to make sure it's newer than the previous
       // message. If so, publish the state so that the control thread can
       // make the movements
-      if (robot_data.lock.try_lock()) {
-        robot_data.updated = true;
-        robot_data.lock.unlock();
+      if (state.getTime() > last_received_time) {
+        if (robot_data.lock.try_lock()) {
+          robot_data.updated = true;
+          last_received_time = state.getTime();
+          current_leader_position = {
+            state.getJoint1Pos(),
+            state.getJoint2Pos(),
+            state.getJoint3Pos(),
+            state.getJoint4Pos(),
+            state.getJoint5Pos(),
+            state.getJoint6Pos(),
+            state.getJoint7Pos()
+          };
+          current_leader_velocity = {
+            state.getJoint1Vel(),
+            state.getJoint2Vel(),
+            state.getJoint3Vel(),
+            state.getJoint4Vel(),
+            state.getJoint5Vel(),
+            state.getJoint6Vel(),
+            state.getJoint7Vel()
+          };
+          robot_data.lock.unlock();
+        }
       }
+      
     }
     });
 
   try {
     franka::Robot robot(argv[1]);
     setDefaultBehavior(robot);
-    // TODO: Read vales from a file provided as a 'profile' argument
+    // TODO: Read values from a file provided as a 'profile' argument
     robot.setCollisionBehavior(
       { {20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0} },
       { {20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0} },
@@ -138,24 +164,36 @@ int main(int argc, const char** argv) {
       { {20.0, 20.0, 20.0, 25.0, 25.0, 25.0} },
       { {20.0, 20.0, 20.0, 25.0, 25.0, 25.0} });
 
-    const franka::Torques torques = franka::Torques(
+    const franka::Torques torques_stop = franka::Torques(
       std::array<double, 7>{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}});
 
     std::function<franka::Torques(const franka::RobotState&, franka::Duration)>
-      control_callback = [&robot_data, &running, &torques](
+      control_callback = [&robot_data, &running, &torques_stop, &current_leader_position, &current_leader_velocity](
         const franka::RobotState& state, franka::Duration) -> franka::Torques {
           if (!running) {
-            return franka::MotionFinished(torques);
+            return franka::MotionFinished(torques_stop);
           }
 
           if (robot_data.lock.try_lock()) {
-            if (robot_data.updated = true) {
+            if (robot_data.updated == true) {
               // TODO: Calculate torques
+
+              std::vector<double> Kp = {30, 30, 30, 30, 15, 15, 15};
+              std::vector<double> Kd = {0.5, 0.5, 0.5, 0.5, 0.25, 0.25, 0.25};
+              std::array<double, 7> calculated_torque = {0, 0, 0, 0, 0, 0, 0};
+
+              for (int i = 0; i < _fstate.q.size(); i++)
+              {
+                  calculated_torque[i] = Kp[i] * (current_leader_position[i] - state.q[i])  + Kd[i] *(current_leader_velocity[i] - state.dq[i]);
+              }
+
+              franka::Torques torques_new(calculated_torque);
+
               robot_data.updated = false;
             }
             robot_data.lock.unlock();
           }
-          return torques;
+          return torques_new;
       };
 
     std::cout << "Robot is ready, press Enter to start." << std::endl;
