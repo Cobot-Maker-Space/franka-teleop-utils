@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(Franka_DIR "/home/johnkiran/libfranka/build")
+set(Franka_DIR "" CACHE FILEPATH "LibFranka install path")
 
 find_package(Eigen3 REQUIRED)
 find_package(Franka REQUIRED)
