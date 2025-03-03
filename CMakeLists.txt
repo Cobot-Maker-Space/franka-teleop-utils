@@ -13,7 +13,7 @@ find_package(CapnProto REQUIRED)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-include_directories(include ${CAPNP_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
+include_directories(include ${CAPNP_INCLUDE_DIRS} ${Franka_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
 
 add_definitions(${CAPNP_DEFINITIONS})
 
