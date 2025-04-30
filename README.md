@@ -54,6 +54,7 @@ Converts recorded files from binary to CSV format.
 ## Message Format
 
 [CapnProto](https://capnproto.org/) is used for message serialisation/deserialisation
-during transmission and recording. See [messages/robot-state.capnp](messages/robot-state.capnp) for the message structure. Each message is 120 bytes. When writing to
-a file, messages are stored contiguously.
+during transmission and recording. See [messages/robot-state.capnp](messages/robot-state.capnp) 
+for the message structure. Each message is 120 bytes. When writing to a file, messages
+are stored contiguously.
 
