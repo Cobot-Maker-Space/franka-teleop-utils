@@ -1,5 +1,5 @@
 /*
-franka-utils
+franka-teleop-utils
 Copyright (C) 2025  Cobot Maker Space, University of Nottinghm
 
 This program is free software: you can redistribute it and/or modify
@@ -29,14 +29,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <franka/exception.h>
-#include <franka/robot.h>
-
 #include <capnp/message.h>
 #include <capnp/serialize.h>
 
-#include "examples_common.h"
-#include "ioutils.h"
+#include <franka/exception.h>
+#include <franka/robot.h>
+
+#include <yaml-cpp/yaml.h>
+
+#include "memory_outputstream.h"
+#include "teleop_utils.h"
+
 #include "messages/robot-state.capnp.h"
 
 namespace {
@@ -44,24 +47,13 @@ namespace {
 	void signal_handler(int signal) { stop(signal); }
 }
 
-/*
- * Message size in bytes. Calculated by producing a message and checking size
- * in sample code.
- */
-const size_t MESSAGE_SIZE = 136;
-
-/*
- * Message publishing rate (Hz)
- */
-const double rate = 10.0; // TODO: Should be an optional command line argument
-
 int main(int argc, const char** argv) {
 
-	if (argc != 3) {
-		std::cerr << "Usage: " << argv[0]
-			<< " <robot_ip> <follower_ip> <follower_port>" << std::endl;
-		return -1;
-	}
+	YAML::Node config = YAML::Load(std::cin);
+	const double rate = config["publish"]["rate"].as<double_t>();
+	const bool autorecover = config["robot"]["autorecovery"]["enabled"].as<bool>();
+	const long long autorecover_wait_time =
+		config["robot"]["autorecovery"]["wait_time_ms"].as<long long>();
 
 	capnp::MallocMessageBuilder message;
 	struct {
@@ -81,12 +73,12 @@ int main(int argc, const char** argv) {
 	std::atomic_bool running{ true };
 	stop = [&running](int signum) -> void { running = false; };
 
-	std::thread publish_thread([argv, &message, &robot_data, sock, &running]() {
+	std::thread publish_thread([config, &message, &robot_data, sock, &rate, &running]() {
 		struct sockaddr_in addr;
 		memset(&addr, 0, sizeof(addr));
 		addr.sin_family = AF_INET;
-		addr.sin_port = htons(std::stoi(argv[3]));
-		addr.sin_addr.s_addr = inet_addr(argv[2]);
+		addr.sin_port = htons(config["publish"]["port"].as<u_short>());
+		addr.sin_addr.s_addr = inet_addr(config["publish"]["host"].as<std::string>().c_str());
 		socklen_t addr_len = sizeof(addr);
 		kj::byte buffer[MESSAGE_SIZE];
 		memset(buffer, 0, MESSAGE_SIZE);
@@ -109,18 +101,8 @@ int main(int argc, const char** argv) {
 		});
 
 	try {
-		franka::Robot robot(argv[1]);
-		setDefaultBehavior(robot);
-		// TODO: Read vales from a file provided as a 'profile' argument
-		robot.setCollisionBehavior(
-			{ {20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0} },
-			{ {20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0} },
-			{ {20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0} },
-			{ {20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0} },
-			{ {20.0, 20.0, 20.0, 25.0, 25.0, 25.0} },
-			{ {20.0, 20.0, 20.0, 25.0, 25.0, 25.0} },
-			{ {20.0, 20.0, 20.0, 25.0, 25.0, 25.0} },
-			{ {20.0, 20.0, 20.0, 25.0, 25.0, 25.0} });
+		franka::Robot robot(config["robot"]["host"].as<std::string>());
+		configure_robot(robot, config);
 
 		const franka::Torques torques = franka::Torques(
 			std::array<double, 7>{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}});
@@ -154,11 +136,30 @@ int main(int argc, const char** argv) {
 					return torques;
 			};
 
+		// TODO: Wait for SIGUSR1 instread of waiting for enter
 		std::cout << "Robot is ready, press Enter to start." << std::endl;
 		std::cin.ignore();
 		std::signal(SIGINT, signal_handler);
 		std::cout << "Robot running, press CTRL-c to stop." << std::endl;
-		robot.control(control_callback);
+
+		while (running) {
+			try {
+				robot.control(control_callback);
+			}
+			catch (const franka::Exception& ex) {
+				std::cerr << "Robot has encountered an error." << std::endl
+					<< ex.what() << std::endl;
+				if (autorecover) {
+					std::cout << "Autorecover is true, robot will restart." << std::endl;
+					std::this_thread::sleep_for(std::chrono::milliseconds(autorecover_wait_time));
+					robot.automaticErrorRecovery();
+				}
+				else {
+					std::cout << "Autorecover is false, robot will stop." << std::endl;
+					running = false;
+				}
+			}
+		}
 
 	}
 	catch (const franka::Exception& ex) {
@@ -172,9 +173,7 @@ int main(int argc, const char** argv) {
 	}
 
 	if (close(sock) == -1) {
-		std::cerr
-			<< "There was an error closing the socket."
-			<< std::endl;
+		std::cerr << "There was an error closing the socket." << std::endl;
 	}
 
 	return 0;

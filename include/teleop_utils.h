@@ -1,5 +1,5 @@
 /*
-franka-utils
+franka-teleop-utils
 Copyright (C) 2025  Cobot Maker Space, University of Nottinghm
 
 This program is free software: you can redistribute it and/or modify
@@ -15,6 +15,16 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-int main(int argc, char** argv) {
-  return 0;
-}
+#include <stddef.h>
+
+#include <franka/robot.h>
+
+#include <yaml-cpp/yaml.h>
+
+/*
+ * Message size in bytes. Calculated by producing a message and checking size
+ * in sample code.
+ */
+const size_t MESSAGE_SIZE = 136;
+
+void configure_robot(franka::Robot &robot, YAML::Node &config);

@@ -1,6 +1,7 @@
 // Copyright (c) 2017 Franka Emika GmbH
 // Use of this source code is governed by the Apache-2.0 license,
 // see LICENSE.apache-2.0
+// see https://github.com/frankaemika/libfranka/blob/0.9.2/examples/examples_common.h
 #pragma once
 
 #include <array>
@@ -13,24 +14,12 @@
 #include <franka/robot_state.h>
 
 /**
- * @file examples_common.h
- * Contains common types and functions for the examples.
- */
-
-/**
- * Sets a default collision behavior, joint impedance and Cartesian impedance.
- *
- * @param[in] robot Robot instance to set behavior on.
- */
-void setDefaultBehavior(franka::Robot& robot);
-
-/**
  * An example showing how to generate a joint pose motion to a goal position. Adapted from:
  * Wisama Khalil and Etienne Dombre. 2002. Modeling, Identification and Control of Robots
  * (Kogan Page Science Paper edition).
  */
 class MotionGenerator {
- public:
+public:
   /**
    * Creates a new MotionGenerator instance for a target q.
    *
@@ -49,7 +38,7 @@ class MotionGenerator {
    */
   franka::JointPositions operator()(const franka::RobotState& robot_state, franka::Duration period);
 
- private:
+private:
   using Vector7d = Eigen::Matrix<double, 7, 1, Eigen::ColMajor>;
   using Vector7i = Eigen::Matrix<int, 7, 1, Eigen::ColMajor>;
 

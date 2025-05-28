@@ -1,5 +1,5 @@
 /*
-franka-utils
+franka-teleop-utils
 Copyright (C) 2025  Cobot Maker Space, University of Nottinghm
 
 This program is free software: you can redistribute it and/or modify
@@ -15,7 +15,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include <ioutils.h>
+#include <memory_outputstream.h>
 
 MemoryOutputStream::MemoryOutputStream(kj::byte* buffer) : buffer(buffer) {}
 

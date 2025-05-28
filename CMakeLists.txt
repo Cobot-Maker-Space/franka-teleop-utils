@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5.0)
-project(franka-utils VERSION 0.1.0 LANGUAGES CXX)
+project(franka-teleop-utils VERSION 0.1.0 LANGUAGES CXX)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
@@ -15,64 +15,71 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 set(Franka_DIR "" CACHE FILEPATH "LibFranka install path")
 
+find_package(CapnProto REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Franka REQUIRED)
-find_package(CapnProto REQUIRED)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
+find_package(yaml-cpp)
 
-include_directories(include ${CAPNP_INCLUDE_DIRS} ${Franka_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
+include_directories(
+  include
+  ${CAPNP_INCLUDE_DIRS}
+  ${Franka_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_BINARY_DIR})
 
 add_definitions(${CAPNP_DEFINITIONS})
 
 capnp_generate_cpp(CAPNP_SRCS CAPNP_HDRS messages/robot-state.capnp)
 
-add_library(examples_common src/examples_common.cpp)
+add_library(
+  common
+  src/memory_outputstream.cpp
+  src/motion_generator.cpp
+  src/teleop_utils.cpp)
 target_link_libraries(
-  examples_common
+  common
   Eigen3::Eigen
 )
 
-add_executable(follower src/follower.cpp ${CAPNP_SRCS} ${CAPNP_HDRS})
-target_link_libraries(
-  follower
-  ${CAPNP_LIBRARIES}
-  examples_common
-  Franka::Franka
-  ${CAPNP_LIBRARIES}
-  Threads::Threads)
-
 add_executable(
-  leader
-  src/leader.cpp
-  src/ioutils.cpp
+  follower
+  src/follower.cpp
   ${CAPNP_SRCS}
   ${CAPNP_HDRS})
 target_link_libraries(
-  leader
+  follower
   ${CAPNP_LIBRARIES}
-  examples_common
+  common
   Franka::Franka
   ${CAPNP_LIBRARIES}
-  Threads::Threads)
+  Threads::Threads
+  ${YAML_CPP_LIBRARIES})
 
-add_executable(player src/player.cpp ${CAPNP_SRCS} ${CAPNP_HDRS})
+add_executable(
+  publisher
+  src/publisher.cpp
+  ${CAPNP_SRCS}
+  ${CAPNP_HDRS})
 target_link_libraries(
-  player
+  publisher
   ${CAPNP_LIBRARIES}
-  examples_common
+  common
   Franka::Franka
   ${CAPNP_LIBRARIES}
-  Threads::Threads)
+  Threads::Threads
+  ${YAML_CPP_LIBRARIES})
 
-add_executable(recorder src/recorder.cpp ${CAPNP_SRCS} ${CAPNP_HDRS})
+add_executable(
+  recorder
+  src/recorder.cpp
+  ${CAPNP_SRCS}
+  ${CAPNP_HDRS})
 target_link_libraries(
   recorder
   ${CAPNP_LIBRARIES}
-  examples_common
+  common
   Franka::Franka
   ${CAPNP_LIBRARIES}
-  Threads::Threads)
-
-add_executable(recording2csv src/recording2csv.cpp ${CAPNP_SRCS} ${CAPNP_HDRS})
-target_link_libraries(recording2csv ${CAPNP_LIBRARIES})
+  Threads::Threads
+  ${YAML_CPP_LIBRARIES})

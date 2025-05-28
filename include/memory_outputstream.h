@@ -1,5 +1,5 @@
 /*
-franka-utils
+franka-teleop-utils
 Copyright (C) 2025  Cobot Maker Space, University of Nottinghm
 
 This program is free software: you can redistribute it and/or modify
