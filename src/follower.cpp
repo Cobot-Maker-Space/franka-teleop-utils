@@ -42,8 +42,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "messages/robot-state.capnp.h"
 
-#define REPORT_RATE
-
 // https://linux.die.net/man/3/sigwait
 namespace {
   std::function<void(int)> stop;

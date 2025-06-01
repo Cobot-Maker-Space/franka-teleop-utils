@@ -69,17 +69,3 @@ target_link_libraries(
   ${CAPNP_LIBRARIES}
   Threads::Threads
   ${YAML_CPP_LIBRARIES})
-
-add_executable(
-  recorder
-  src/recorder.cpp
-  ${CAPNP_SRCS}
-  ${CAPNP_HDRS})
-target_link_libraries(
-  recorder
-  ${CAPNP_LIBRARIES}
-  common
-  Franka::Franka
-  ${CAPNP_LIBRARIES}
-  Threads::Threads
-  ${YAML_CPP_LIBRARIES})
