@@ -47,10 +47,11 @@ namespace {
 	void signal_handler(int signal) { stop(signal); }
 }
 
-int main(int argc, const char** argv) {
+// TODO: Incorporate gripper state (if attached)
+int main(int, const char**) {
 
 	YAML::Node config = YAML::Load(std::cin);
-	const double rate = config["publish"]["rate"].as<double_t>();
+	const double rate = config["publish"]["rate"].as<double>();
 	const bool autorecover = config["robot"]["autorecovery"]["enabled"].as<bool>();
 	const long long autorecover_wait_time =
 		config["robot"]["autorecovery"]["wait_time_ms"].as<long long>();
@@ -59,7 +60,7 @@ int main(int argc, const char** argv) {
 	struct {
 		std::mutex lock;
 		RobotState::Builder state_builder;
-		bool updated;
+		bool updated = false;
 	} robot_data{
 		.state_builder = message.initRoot<RobotState>()
 	};
@@ -71,7 +72,7 @@ int main(int argc, const char** argv) {
 	}
 
 	std::atomic_bool running{ true };
-	stop = [&running](int signum) -> void { running = false; };
+	stop = [&running](int) -> void { running = false; };
 
 	std::thread publish_thread([config, &message, &robot_data, sock, &rate, &running]() {
 		struct sockaddr_in addr;
@@ -98,6 +99,7 @@ int main(int argc, const char** argv) {
 				robot_data.lock.unlock();
 			}
 		}
+		return EXIT_SUCCESS;
 		});
 
 	try {
@@ -140,7 +142,7 @@ int main(int argc, const char** argv) {
 		std::cout << "Robot is ready, press Enter to start." << std::endl;
 		std::cin.ignore();
 		std::signal(SIGINT, signal_handler);
-		std::cout << "Robot running, press CTRL-c to stop." << std::endl;
+		std::cout << "Publisher running, press CTRL-c to stop." << std::endl;
 
 		while (running) {
 			try {
@@ -176,5 +178,5 @@ int main(int argc, const char** argv) {
 		std::cerr << "There was an error closing the socket." << std::endl;
 	}
 
-	return 0;
+	return EXIT_SUCCESS;
 }

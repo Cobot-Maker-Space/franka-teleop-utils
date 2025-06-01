@@ -1,5 +1,5 @@
 /*
-franka-utils
+franka-teleop-utils
 Copyright (C) 2025  Cobot Maker Space, University of Nottinghm
 
 This program is free software: you can redistribute it and/or modify
@@ -19,7 +19,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <atomic>
 #include <csignal>
 #include <functional>
-#include <iomanip>
 #include <iostream>
 #include <mutex>
 #include <string>
@@ -30,39 +29,42 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <franka/exception.h>
-#include <franka/robot.h>
-
 #include <capnp/message.h>
 #include <capnp/serialize.h>
 
-#include "examples_common.h"
-#include "ioutils.h"
+#include <franka/exception.h>
+#include <franka/model.h>
+#include <franka/robot.h>
+
+#include <yaml-cpp/yaml.h>
+
+#include "teleop_utils.h"
+
 #include "messages/robot-state.capnp.h"
 
+#define REPORT_RATE
+
+// https://linux.die.net/man/3/sigwait
 namespace {
   std::function<void(int)> stop;
   void signal_handler(int signal) { stop(signal); }
 }
 
-/*
- * Message size in bytes. Calculated by producing a message and checking size
- * in sample code.
- */
-const size_t MESSAGE_SIZE = 136;
+// TODO: Incorporate gripper state (if attached)
+int main(int, const char**) {
 
-int main(int argc, const char** argv) {
+  YAML::Node config = YAML::Load(std::cin);
 
-  if (argc != 3) {
-    std::cerr << "Usage: " << argv[0] << " <robot_ip> <listen_port>" << std::endl;
-    return -1;
-  }
-
-  capnp::MallocMessageBuilder message;
   struct {
     std::mutex lock;
-    bool updated;
-  } robot_data{};
+    std::atomic_bool running{ true };
+    bool updated = false;
+    std::array<double, 7> leader_pos = { 0, 0, 0, 0, 0, 0, 0 };
+    std::array<double, 7> leader_vel = { 0, 0, 0, 0, 0, 0, 0 };
+#ifdef REPORT_RATE
+    int counter = 0;
+#endif
+  } thread_data{};
 
   int sock;
   if ((sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
@@ -70,19 +72,33 @@ int main(int argc, const char** argv) {
     exit(EXIT_FAILURE);
   }
 
-  std::atomic_bool running{ true };
-  stop = [&running](int signum) -> void { running = false; };
+  stop = [&sock, &thread_data](int) -> void {
+    thread_data.running = false;
+    shutdown(sock, SHUT_RDWR);
+    };
 
-  std::array<double, 7> current_leader_position = {0, 0, 0, 0, 0, 0, 0};
-  std::array<double, 7> current_leader_velocity = {0, 0, 0, 0, 0, 0, 0};
-  double last_received_time = 0.0;
+#ifdef REPORT_RATE
+  std::thread report_thread([&thread_data]() {
+    while (thread_data.running) {
+      if (thread_data.lock.try_lock()) {
+        std::cout << "Update rate: " << thread_data.counter << "hz" << std::endl;
+        thread_data.counter = 0;
+      }
+      thread_data.lock.unlock();
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    return EXIT_SUCCESS;
+    });
+#endif
 
-  std::thread receive_thread([argv, &message, &robot_data, sock, &running, &last_received_time, &current_leader_position, &current_leader_velocity]() {
+  std::thread receive_thread([&config, &sock, &thread_data]() {
+    double last_received_time = 0.0;
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(std::stoi(argv[2]));
-    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(config["publish"]["port"].as<u_short>());
+    addr.sin_addr.s_addr = INADDR_ANY; // TODO: Check configured host and apply accordingly
+    // TODO: Multicast setup if needed - https://gist.github.com/dksmiffs/d67afe6bda973d67752ae63dc49a7310
     socklen_t addr_len = sizeof(addr);
     if (bind(sock, (struct sockaddr*)&addr, addr_len) < 0) {
       std::cerr << "Could not bind to port." << std::endl;
@@ -91,9 +107,9 @@ int main(int argc, const char** argv) {
     kj::byte buffer[MESSAGE_SIZE];
     memset(&buffer, 0, MESSAGE_SIZE);
     kj::ArrayPtr<kj::byte> buffer_array(buffer, MESSAGE_SIZE);
-    while (running) {
+    while (thread_data.running) {
       if (recvfrom(sock, buffer, MESSAGE_SIZE, 0,
-        (struct sockaddr*)&addr, &addr_len) < 0) {
+        (struct sockaddr*)&addr, &addr_len) <= 0) {
         std::cerr << "Error during message reception." << std::endl;
         continue;
       }
@@ -102,109 +118,113 @@ int main(int argc, const char** argv) {
       capnp::InputStreamMessageReader reader(in);
       RobotState::Reader state = reader.getRoot<RobotState>();
 
-      std::cout << state.getTime() << ", "
-      << std::setw(5) << state.getJoint1Pos() << ", "
-      << std::setw(5) << state.getJoint2Pos() << ", "
-      << std::setw(5) << state.getJoint3Pos() << ", "
-      << std::setw(5) << state.getJoint4Pos() << ", "
-      << std::setw(5) << state.getJoint5Pos() << ", "
-      << std::setw(5) << state.getJoint6Pos() << ", "
-      << std::setw(5) << state.getJoint7Pos() << ", "
-      << std::setw(5) << state.getJoint1Vel() << ", "
-      << std::setw(5) << state.getJoint2Vel() << ", "
-      << std::setw(5) << state.getJoint3Vel() << ", "
-      << std::setw(5) << state.getJoint4Vel() << ", "
-      << std::setw(5) << state.getJoint5Vel() << ", "
-      << std::setw(5) << state.getJoint6Vel() << ", "
-      << std::setw(5) << state.getJoint7Vel() << std::endl;
-
-      // TODO: Check state time to make sure it's newer than the previous
-      // message. If so, publish the state so that the control thread can
-      // make the movements
-      if (state.getTime() > last_received_time) {
-        if (robot_data.lock.try_lock()) {
-          robot_data.updated = true;
-          last_received_time = state.getTime();
-          current_leader_position = {
-            state.getJoint1Pos(),
-            state.getJoint2Pos(),
-            state.getJoint3Pos(),
-            state.getJoint4Pos(),
-            state.getJoint5Pos(),
-            state.getJoint6Pos(),
-            state.getJoint7Pos()
-          };
-          current_leader_velocity = {
-            state.getJoint1Vel(),
-            state.getJoint2Vel(),
-            state.getJoint3Vel(),
-            state.getJoint4Vel(),
-            state.getJoint5Vel(),
-            state.getJoint6Vel(),
-            state.getJoint7Vel()
-          };
-          robot_data.lock.unlock();
-        }
+      if (state.getTime() > last_received_time && thread_data.lock.try_lock()) {
+        thread_data.updated = true;
+        last_received_time = state.getTime();
+        thread_data.leader_pos[0] = state.getJoint1Pos();
+        thread_data.leader_pos[1] = state.getJoint2Pos();
+        thread_data.leader_pos[2] = state.getJoint3Pos();
+        thread_data.leader_pos[3] = state.getJoint4Pos();
+        thread_data.leader_pos[4] = state.getJoint5Pos();
+        thread_data.leader_pos[5] = state.getJoint6Pos();
+        thread_data.leader_pos[6] = state.getJoint7Pos();
+        thread_data.leader_vel[0] = state.getJoint1Vel();
+        thread_data.leader_vel[1] = state.getJoint2Vel();
+        thread_data.leader_vel[2] = state.getJoint3Vel();
+        thread_data.leader_vel[3] = state.getJoint4Vel();
+        thread_data.leader_vel[4] = state.getJoint5Vel();
+        thread_data.leader_vel[5] = state.getJoint6Vel();
+        thread_data.leader_vel[6] = state.getJoint7Vel();
+        thread_data.lock.unlock();
       }
-      
+
     }
+    return EXIT_SUCCESS;
     });
 
+  franka::Robot robot(config["robot"]["host"].as<std::string>());
   try {
-    franka::Robot robot(argv[1]);
-    setDefaultBehavior(robot);
-    // TODO: Read values from a file provided as a 'profile' argument
-    robot.setCollisionBehavior(
-      { {20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0} },
-      { {20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0} },
-      { {20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0} },
-      { {20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0} },
-      { {20.0, 20.0, 20.0, 25.0, 25.0, 25.0} },
-      { {20.0, 20.0, 20.0, 25.0, 25.0, 25.0} },
-      { {20.0, 20.0, 20.0, 25.0, 25.0, 25.0} },
-      { {20.0, 20.0, 20.0, 25.0, 25.0, 25.0} });
-
-    const franka::Torques torques = franka::Torques(
-      std::array<double, 7>{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}});
+    configure_robot(robot, config);
+    franka::Model model = robot.loadModel();
+    const bool rate_limit = config["robot"]["rate_limit"].as<bool>();
+    const double cutoff_freq = config["robot"]["cutoff_frequency"].as<double>();
+    const bool autorecover = config["robot"]["autorecovery"]["enabled"].as<bool>();
+    const long long autorecover_wait_time =
+      config["robot"]["autorecovery"]["wait_time_ms"].as<long long>();
+    std::array<double, 7> stiffness = { {
+      config["robot"]["stiffness"]["joint1"].as<double>(),
+      config["robot"]["stiffness"]["joint2"].as<double>(),
+      config["robot"]["stiffness"]["joint3"].as<double>(),
+      config["robot"]["stiffness"]["joint4"].as<double>(),
+      config["robot"]["stiffness"]["joint5"].as<double>(),
+      config["robot"]["stiffness"]["joint6"].as<double>(),
+      config["robot"]["stiffness"]["joint7"].as<double>()} };
+    std::array<double, 7> damping = { {
+      config["robot"]["damping"]["joint1"].as<double>(),
+      config["robot"]["damping"]["joint2"].as<double>(),
+      config["robot"]["damping"]["joint3"].as<double>(),
+      config["robot"]["damping"]["joint4"].as<double>(),
+      config["robot"]["damping"]["joint5"].as<double>(),
+      config["robot"]["damping"]["joint6"].as<double>(),
+      config["robot"]["damping"]["joint7"].as<double>()} };
+    std::array<double, 7> torques = { 0, 0, 0, 0, 0, 0, 0 };
 
     std::function<franka::Torques(const franka::RobotState&, franka::Duration)>
-      control_callback = [&robot_data, &running, &torques, &current_leader_position, &current_leader_velocity](
+      control_callback = [&damping, &model, &stiffness, &thread_data, &torques](
         const franka::RobotState& state, franka::Duration) -> franka::Torques {
-          if (!running) {
-            return franka::MotionFinished(torques);
+
+          if (!thread_data.running) {
+            return franka::MotionFinished(franka::Torques(
+              std::array<double, 7>{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}}));
           }
 
-          if (robot_data.lock.try_lock()) {
-            if (robot_data.updated == true) {
-              // TODO: Calculate torques
-
-              std::vector<double> Kp = {30, 30, 30, 30, 15, 15, 15};
-              std::vector<double> Kd = {0.5, 0.5, 0.5, 0.5, 0.25, 0.25, 0.25};
-              std::array<double, 7> calculated_torque = {0, 0, 0, 0, 0, 0, 0};
-
-              for (int i = 0; i < state.q.size(); i++)
-              {
-                  calculated_torque[i] = Kp[i] * (current_leader_position[i] - state.q[i])  + Kd[i] *(current_leader_velocity[i] - state.dq[i]);
+          if (thread_data.lock.try_lock()) {
+            if (thread_data.updated == true) {
+#ifdef REPORT_RATE
+              thread_data.counter = 0;
+#endif
+              std::array<double, 7> coriolis = model.coriolis(state);
+              for (size_t i = 0; i < 7; i++) {
+                torques[i] =
+                  stiffness[i] *
+                  (thread_data.leader_pos[i] - state.q[i])
+                  - damping[i] * state.dq[i] + coriolis[i];
               }
-
-              franka::Torques torques(calculated_torque);
-
-              robot_data.updated = false;
+              thread_data.updated = false;
+              thread_data.lock.unlock();
+              return torques;
             }
-            robot_data.lock.unlock();
+            thread_data.lock.unlock();
           }
+
           return torques;
       };
 
-    std::cout << "Robot is ready, press Enter to start." << std::endl;
-    std::cin.ignore();
+    // TODO: Wait for SIGUSR1 before starting
     std::signal(SIGINT, signal_handler);
-    std::cout << "Robot running, press CTRL-c to stop." << std::endl;
-    robot.control(control_callback);
+    std::cout << "Publisher running, press CTRL-c to stop." << std::endl;
+    while (thread_data.running) {
+      try {
+        robot.control(control_callback, rate_limit, cutoff_freq);
+      }
+      catch (const franka::Exception& ex) {
+        std::cerr << "Robot has encountered an error." << std::endl
+          << ex.what() << std::endl;
+        if (autorecover) {
+          std::cout << "Autorecover is true, robot will restart." << std::endl;
+          std::this_thread::sleep_for(std::chrono::milliseconds(autorecover_wait_time));
+          robot.automaticErrorRecovery();
+        }
+        else {
+          std::cout << "Autorecover is false, robot will stop." << std::endl;
+          thread_data.running = false;
+        }
+      }
+    }
 
   }
   catch (const franka::Exception& ex) {
-    running = false;
+    thread_data.running = false;
     std::cerr << "Robot has encountered an error and will stop." << std::endl
       << ex.what() << std::endl;
   }
@@ -214,10 +234,8 @@ int main(int argc, const char** argv) {
   }
 
   if (close(sock) == -1) {
-    std::cerr
-      << "There was an error closing the socket."
-      << std::endl;
+    std::cerr << "There was an error closing the socket." << std::endl;
   }
 
-  return 0;
+  return EXIT_SUCCESS;
 }
