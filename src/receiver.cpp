@@ -26,11 +26,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
+#include <netdb.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include <capnp/message.h>
 #include <capnp/serialize.h>
+
+#include <cxxopts.hpp>
 
 #include <franka/exception.h>
 #include <franka/model.h>
@@ -48,10 +52,24 @@ namespace {
   void signal_handler(int signal) { stop(signal); }
 }
 
-// TODO: Incorporate gripper state (if attached)
-int main(int, const char**) {
+bool in_multicast(in_addr_t address) {
+  return (((long int)address) & 0xf0000000) == 0xe0000000;
+}
 
-  YAML::Node config = YAML::Load(std::cin);
+// TODO: Incorporate gripper state (if attached)
+int main(int argc, const char** argv) {
+
+  cxxopts::Options options("sender", "Send robot state to receiver(s)");
+  options.add_options()
+    ("c,config-file", "Path to configuration file", cxxopts::value<std::string>());
+  auto poptions = options.parse(argc, argv);
+  YAML::Node config;
+  if (poptions.count("config-file")) {
+    config = YAML::LoadFile(poptions["config-file"].as<std::string>());
+  }
+  else {
+    config = YAML::Load(std::cin);
+  }
 
   struct {
     std::mutex lock;
@@ -69,6 +87,12 @@ int main(int, const char**) {
     std::cerr << "Could not create socket." << std::endl;
     exit(EXIT_FAILURE);
   }
+  int reuse = 1;
+  if ((setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
+    (char*)&reuse, sizeof(reuse))) < 0) {
+    std::cerr << "Could not set socket to reusable." << std::endl;
+    exit(EXIT_FAILURE);
+  }
 
   stop = [&sock, &thread_data](int) -> void {
     thread_data.running = false;
@@ -77,9 +101,10 @@ int main(int, const char**) {
 
 #ifdef REPORT_RATE
   std::thread report_thread([&thread_data]() {
+    std::cout << std::endl;
     while (thread_data.running) {
       if (thread_data.lock.try_lock()) {
-        std::cout << "Update rate: " << thread_data.counter << "hz" << std::endl;
+        std::cout << "\33[2K\rUpdate rate: " << thread_data.counter << "hz" << std::endl;
         thread_data.counter = 0;
       }
       thread_data.lock.unlock();
@@ -94,8 +119,39 @@ int main(int, const char**) {
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(config["publish"]["port"].as<u_short>());
-    addr.sin_addr.s_addr = INADDR_ANY; // TODO: Check configured host and apply accordingly
+    addr.sin_port = htons(config["listen"]["port"].as<u_short>());
+    if (config["listen"]["host"]) {
+      in_addr_t host = inet_addr(
+        config["listen"]["host"].as<std::string>().c_str());
+      if (in_multicast(host)) {
+        addr.sin_addr.s_addr = INADDR_ANY;
+        struct ifaddrs* ifaddr;
+        if (getifaddrs(&ifaddr) == -1) {
+          std::cerr << "Unable to enumerate network interfaces." << std::endl;
+          exit(EXIT_FAILURE);
+        }
+        char addr_s[NI_MAXHOST];
+        for (struct ifaddrs* ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+          if (ifa->ifa_addr != NULL && ifa->ifa_addr->sa_family == AF_INET) {
+            ip_mreq group = {};
+            group.imr_multiaddr.s_addr = host;
+            getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),
+              addr_s, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+            group.imr_interface.s_addr = inet_addr(addr_s);
+            setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&group, sizeof(group));
+          }
+        }
+        freeifaddrs(ifaddr);
+      }
+      else {
+        addr.sin_addr.s_addr = host;
+      }
+    }
+    else {
+      addr.sin_addr.s_addr = INADDR_ANY;
+    }
+
+
     // TODO: Multicast setup if needed - https://gist.github.com/dksmiffs/d67afe6bda973d67752ae63dc49a7310
     socklen_t addr_len = sizeof(addr);
     if (bind(sock, (struct sockaddr*)&addr, addr_len) < 0) {
@@ -179,7 +235,7 @@ int main(int, const char**) {
           if (thread_data.lock.try_lock()) {
             if (thread_data.updated == true) {
 #ifdef REPORT_RATE
-              thread_data.counter = 0;
+              thread_data.counter++;
 #endif
               std::array<double, 7> coriolis = model.coriolis(state);
               for (size_t i = 0; i < 7; i++) {
@@ -188,6 +244,15 @@ int main(int, const char**) {
                   (thread_data.leader_pos[i] - state.q[i])
                   - damping[i] * state.dq[i] + coriolis[i];
               }
+
+              /*for (size_t i = 0; i < 7; i++) {
+                torques[i] =
+                  stiffness[i] *
+                  (thread_data.leader_pos[i] - state.q[i])
+                  + damping[i]
+                  * (thread_data.leader_vel[i] - state.dq[i]);
+              }*/
+
               thread_data.updated = false;
               thread_data.lock.unlock();
               return torques;
@@ -198,9 +263,9 @@ int main(int, const char**) {
           return torques;
       };
 
-    // TODO: Wait for SIGUSR1 before starting
     std::signal(SIGINT, signal_handler);
-    std::cout << "Publisher running, press CTRL-c to stop." << std::endl;
+    std::cout << "Follower running, press CTRL-c to stop." << std::endl;
+
     while (thread_data.running) {
       try {
         robot.control(control_callback, rate_limit, cutoff_freq);

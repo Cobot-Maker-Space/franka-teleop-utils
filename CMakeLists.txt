@@ -5,7 +5,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -14,6 +14,8 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 set(Franka_DIR "" CACHE FILEPATH "LibFranka install path")
+
+option(REPORT_RATE "Report sending/receiving rates" OFF)
 
 find_package(CapnProto REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -30,6 +32,10 @@ include_directories(
 
 add_definitions(${CAPNP_DEFINITIONS})
 
+if(REPORT_RATE)
+  add_definitions(-DREPORT_RATE)
+endif()
+
 capnp_generate_cpp(CAPNP_SRCS CAPNP_HDRS messages/robot-state.capnp)
 
 add_library(
@@ -43,12 +49,12 @@ target_link_libraries(
 )
 
 add_executable(
-  follower
-  src/follower.cpp
+  receiver
+  src/receiver.cpp
   ${CAPNP_SRCS}
   ${CAPNP_HDRS})
 target_link_libraries(
-  follower
+  receiver
   ${CAPNP_LIBRARIES}
   common
   Franka::Franka
@@ -57,12 +63,12 @@ target_link_libraries(
   ${YAML_CPP_LIBRARIES})
 
 add_executable(
-  publisher
-  src/publisher.cpp
+  sender
+  src/sender.cpp
   ${CAPNP_SRCS}
   ${CAPNP_HDRS})
 target_link_libraries(
-  publisher
+  sender
   ${CAPNP_LIBRARIES}
   common
   Franka::Franka
