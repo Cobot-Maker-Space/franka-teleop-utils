@@ -111,7 +111,7 @@ int main(int argc, const char** argv) {
                 - damping[i] * state.dq[i] + coriolis[i];
             }
 
-            thread_data.updated = false;
+            //thread_data.updated = false;
             thread_data.lock.unlock();
             return torques;
           }
