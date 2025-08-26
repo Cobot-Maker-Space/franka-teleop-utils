@@ -10,10 +10,8 @@ import capnp
 capnp.remove_import_hook()
 robotstate_capnp = capnp.load("robot-state.capnp")
 
-VINCENT_HOST = "224.3.29.71"
-VINCENT_PORT = 49187
-BOB_HOST = "172.22.3.6"
-BOB_PORT = 49189
+ROBOT_HOST = "224.3.29.71"
+ROBOT_PORT = 49187
 MESSAGE_SIZE = 136
 
 frequency = 20
@@ -55,7 +53,7 @@ def main(argv):
     threads.append(
         threading.Thread(
             target=play,
-            args=("Vincent", path, VINCENT_HOST, VINCENT_PORT),
+            args=("Vincent", path, ROBOT_HOST, ROBOT_PORT),
         )
     )
     """
