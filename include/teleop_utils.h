@@ -15,7 +15,9 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-#include <stddef.h>
+#include <asio.hpp>
+
+#include <capnp/serialize.h>
 
 #include <franka/robot.h>
 
@@ -27,4 +29,71 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 const size_t MESSAGE_SIZE = 136;
 
-void configure_robot(franka::Robot &robot, YAML::Node &config);
+struct thread_data {
+  std::mutex lock;
+  std::atomic_bool running{ true };
+  bool updated = false;
+#ifdef REPORT_RATE
+  int counter = 0;
+#endif
+};
+
+void configure_robot(YAML::Node& config, franka::Robot& robot);
+
+YAML::Node parse_options(int, const char**);
+
+class PublishThread {
+public:
+  PublishThread(
+    asio::ip::udp::socket& socket,
+    asio::ip::udp::endpoint& endpoint,
+    double_t publish_rate,
+    capnp::MallocMessageBuilder& message,
+    struct thread_data& thread_data) :
+    socket(socket),
+    endpoint(endpoint),
+    publish_rate(publish_rate),
+    message(message),
+    thread_data(thread_data) {
+  };
+  void operator()() const;
+private:
+  asio::ip::udp::socket& socket;
+  asio::ip::udp::endpoint& endpoint;
+  double_t publish_rate;
+  capnp::MallocMessageBuilder& message;
+  struct thread_data& thread_data;
+};
+
+class SubscribeThread {
+public:
+  SubscribeThread(
+    std::array<double, 7>& leader_pos,
+    std::array<double, 7>& leader_vel,
+    asio::ip::udp::socket& socket,
+    struct thread_data& thread_data) :
+    leader_pos(leader_pos),
+    leader_vel(leader_vel),
+    socket(socket),
+    thread_data(thread_data) {
+  };
+  void operator()() const;
+private:
+  std::array<double, 7>& leader_pos;
+  std::array<double, 7>& leader_vel;
+  asio::ip::udp::socket& socket;
+  struct thread_data& thread_data;
+};
+
+#ifdef REPORT_RATE
+class ReportThread {
+public:
+  ReportThread(std::string name, struct thread_data& thread_data)
+    : name(name), thread_data(thread_data) {
+  };
+  void operator()() const;
+private:
+  std::string name;
+  struct thread_data& thread_data;
+};
+#endif
