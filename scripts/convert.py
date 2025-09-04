@@ -18,7 +18,7 @@ with open(sys.argv[1], "rb") as f:
     while buf := f.read(MESSAGE_SIZE):
         with robotstate_capnp.RobotState.from_bytes(buf) as state:
             time = datetime.datetime.fromtimestamp(start_ts + (state.time / 1000))
-            print(f"{time.strftime("%d/%m/%y %H:%M:%S")},", end="")
+            print(f"{time.strftime('%d/%m/%y %H:%M:%S')},", end="")
             print(f"{state.joint1Pos},", end="")
             print(f"{state.joint2Pos},", end="")
             print(f"{state.joint3Pos},", end="")

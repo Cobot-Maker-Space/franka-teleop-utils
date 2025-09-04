@@ -11,7 +11,7 @@ robotstate_capnp = capnp.load("robot-state.capnp")
 VINCENT_PORT = 49186
 BOB_PORT = 49188
 MESSAGE_SIZE = 136
-BASE_PATH = "/Users/pszdp1/Library/CloudStorage/OneDrive-TheUniversityofNottingham/Development/embrace-angels/eapy/recordings"
+BASE_PATH = "/Users/pszsdc/repos/soma/franka-teleop-utils/recordings"
 
 
 def record(file: pathlib.Path, sock: socket.socket):
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     bsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     bsock.bind(("", BOB_PORT))
 
-    now = datetime.datetime.now(datetime.UTC)
+    now = datetime.datetime.now(datetime.timezone.utc)
     outdir = pathlib.Path(BASE_PATH, now.strftime("%y%m%d%H%M%S"))
     outdir.mkdir()
 
