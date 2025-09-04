@@ -15,4 +15,11 @@ struct RobotState {
   joint5Vel @12 :Float64;
   joint6Vel @13 :Float64;
   joint7Vel @14 :Float64;
+  joint1Torque @15 :Float64;
+  joint2Torque @16 :Float64;
+  joint3Torque @17 :Float64;
+  joint4Torque @18 :Float64;
+  joint5Torque @19 :Float64;
+  joint6Torque @20 :Float64;
+  joint7Torque @21 :Float64;
 }

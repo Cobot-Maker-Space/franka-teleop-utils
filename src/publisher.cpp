@@ -85,6 +85,13 @@ int main(int argc, const char** argv) {
 				state_builder.setJoint5Vel(state.dq[4]);
 				state_builder.setJoint6Vel(state.dq[5]);
 				state_builder.setJoint7Vel(state.dq[6]);
+				state_builder.setJoint1Torque(state.tau_J[0]);
+				state_builder.setJoint2Torque(state.tau_J[1]);
+				state_builder.setJoint3Torque(state.tau_J[2]);
+				state_builder.setJoint4Torque(state.tau_J[3]);
+				state_builder.setJoint5Torque(state.tau_J[4]);
+				state_builder.setJoint6Torque(state.tau_J[5]);
+				state_builder.setJoint7Torque(state.tau_J[6]);
 				thread_data.lock.unlock();
 #ifdef REPORT_RATE
 				thread_data.counter++;
