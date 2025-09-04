@@ -27,7 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * Message size in bytes. Calculated by producing a message and checking size
  * in sample code.
  */
-const size_t MESSAGE_SIZE = 136;
+const size_t MESSAGE_SIZE = 192;
 
 struct thread_data {
   std::mutex lock;
