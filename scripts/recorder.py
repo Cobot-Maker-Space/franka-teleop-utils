@@ -11,7 +11,7 @@ robotstate_capnp = capnp.load("robot-state.capnp")
 
 VINCENT_PORT = 49186
 BOB_PORT = 49188
-MESSAGE_SIZE = 192
+MESSAGE_SIZE = 248
 BASE_PATH = "/Users/pszsdc/repos/soma/franka-teleop-utils/recordings"
 
 # Shared packet counters
