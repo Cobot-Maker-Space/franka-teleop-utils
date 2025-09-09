@@ -137,6 +137,28 @@ int main(int argc, const char** argv) {
       initial_pos));
     std::cout << "Robot ready, press enter to start." << std::endl;
     std::cin.ignore();
+    
+    std::cout << "Waiting for first packet from leader..." << std::endl;
+    while (thread_data.running && !thread_data.first_packet_received) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    
+    if (!thread_data.running) {
+      std::cout << "Stopped before receiving first packet." << std::endl;
+      return EXIT_FAILURE;
+    }
+    
+    std::array<double, 7> first_position;
+    {
+      std::lock_guard<std::mutex> lock(thread_data.lock);
+      first_position = leader_pos;
+    }
+    
+    std::cout << "Moving to first leader position..." << std::endl;
+    robot.control(MotionGenerator(
+      config["robot"]["initial_position"]["speed_factor"].as<double>(),
+      first_position));
+    
     std::cout << "Robot running, press CTRL-c to stop." << std::endl;
 
 #ifdef REPORT_RATE

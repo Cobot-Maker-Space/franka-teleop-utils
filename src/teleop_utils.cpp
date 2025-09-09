@@ -151,6 +151,11 @@ void SubscribeThread::operator()() const {
       leader_vel[4] = state.getJoint5Vel();
       leader_vel[5] = state.getJoint6Vel();
       leader_vel[6] = state.getJoint7Vel();
+      
+      if (!thread_data.first_packet_received) {
+        thread_data.first_packet_received = true;
+      }
+      
       thread_data.lock.unlock();
     }
   }
