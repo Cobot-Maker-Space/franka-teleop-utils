@@ -33,6 +33,7 @@ struct thread_data {
   std::mutex lock;
   std::atomic_bool running{ true };
   bool updated = false;
+  bool first_packet_received = false;
 #ifdef REPORT_RATE
   int counter = 0;
 #endif
