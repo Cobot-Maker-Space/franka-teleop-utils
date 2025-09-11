@@ -16,6 +16,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include <iostream>
+#include <chrono>
 
 #include <franka/exception.h>
 
@@ -60,11 +61,13 @@ int main(int argc, const char** argv) {
 	franka::Torques torques = franka::Torques(
 		std::array<double, 7>{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}});
 	RobotState::Builder state_builder = message.initRoot<RobotState>();
-	uint64_t robot_time = 0;
 
-	auto control_callback = [&robot_time, &state_builder, &thread_data, &torques](
+	auto control_callback = [&state_builder, &thread_data, &torques](
 		const franka::RobotState& state, franka::Duration time_step) -> franka::Torques {
-			robot_time += time_step.toMSec();
+			// Get current Unix timestamp in milliseconds
+			uint64_t robot_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::system_clock::now().time_since_epoch()
+			).count();
 			if (!thread_data.running) {
 				return franka::MotionFinished(torques);
 			}
