@@ -1,3 +1,4 @@
+import argparse
 import datetime
 import pathlib
 import socket
@@ -119,6 +120,10 @@ def display_status(outdir: pathlib.Path):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Record robot teleoperation data")
+    parser.add_argument("--vincent-name", help="Custom filename for Vincent robot recording")
+    parser.add_argument("--bob-name", help="Custom filename for Bob robot recording")
+    args = parser.parse_args()
 
     vsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     vsock.bind(("", VINCENT_PORT))
@@ -126,12 +131,22 @@ if __name__ == "__main__":
     bsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     bsock.bind(("", BOB_PORT))
 
-    now = datetime.datetime.now(datetime.timezone.utc)
-    outdir = pathlib.Path(BASE_PATH, now.strftime("%y%m%d%H%M%S"))
-    outdir.mkdir()
-
-    vfile = pathlib.Path(outdir, "vincent")
-    bfile = pathlib.Path(outdir, "bob")
+    # Create output directory and files
+    if args.vincent_name or args.bob_name:
+        # If custom names provided, use recordings folder directly
+        outdir = pathlib.Path(BASE_PATH)
+        outdir.mkdir(exist_ok=True)
+        
+        vfile = pathlib.Path(outdir, args.vincent_name) if args.vincent_name else pathlib.Path(outdir, "vincent_default")
+        bfile = pathlib.Path(outdir, args.bob_name) if args.bob_name else pathlib.Path(outdir, "bob_default")
+    else:
+        # Default behavior: create timestamp folder
+        now = datetime.datetime.now(datetime.timezone.utc)
+        outdir = pathlib.Path(BASE_PATH, now.strftime("%y%m%d%H%M%S"))
+        outdir.mkdir()
+        
+        vfile = pathlib.Path(outdir, "vincent")
+        bfile = pathlib.Path(outdir, "bob")
 
     threads = []
 

@@ -11,14 +11,12 @@ MESSAGE_SIZE = 248  # Updated to include external torque values
 
 print("Timestamp,Position1,Position2,Position3,Position4,Position5,Position6,Position7,Velocity1,Velocity2,Velocity3,Velocity4,Velocity5,Velocity6,Velocity7,Torque1,Torque2,Torque3,Torque4,Torque5,Torque6,Torque7,ExtTorque1,ExtTorque2,ExtTorque3,ExtTorque4,ExtTorque5,ExtTorque6,ExtTorque7")
 
-start_ts = pathlib.Path(sys.argv[1]).stat().st_ctime
-
-
 with open(sys.argv[1], "rb") as f:
     while buf := f.read(MESSAGE_SIZE):
         with robotstate_capnp.RobotState.from_bytes(buf) as state:
-            time = datetime.datetime.fromtimestamp(start_ts + (state.time / 1000))
-            print(f"{time.strftime('%d/%m/%y %H:%M:%S')},", end="")
+            # Convert Unix timestamp (milliseconds) to readable format
+            timestamp = datetime.datetime.fromtimestamp(state.time / 1000.0, tz=datetime.timezone.utc)
+            print(f"{timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}Z,", end="")
             print(f"{state.joint1Pos},", end="")
             print(f"{state.joint2Pos},", end="")
             print(f"{state.joint3Pos},", end="")
