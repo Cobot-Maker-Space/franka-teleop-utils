@@ -91,6 +91,8 @@ def display_status(outdir: pathlib.Path):
             bob_joints = joint_positions["bob"].copy()
             vincent_torques = joint_torques["vincent"].copy()
             vincent_ext_torques = external_torques["vincent"].copy()
+            bob_torques = joint_torques["bob"].copy()
+            bob_ext_torques = external_torques["bob"].copy()
         
         # Move cursor to top and display status
         print(f"\033[H\033[2J")
@@ -110,10 +112,12 @@ def display_status(outdir: pathlib.Path):
             print(f"Joint {i+1:2d}: {vincent_joints[i]:10.4f}    {vincent_torques[i]:10.4f}     {vincent_ext_torques[i]:13.4f}")
         print()
         
-        # Display Bob's joint positions (positions only since not publishing torques)
-        print(f"BOB Joint Positions:")
-        for i, pos in enumerate(bob_joints, 1):
-            print(f"  Joint {i}: {pos:8.4f} rad")
+        # Display Bob's data in three columns (mirroring Vincent's format)
+        print(f"BOB Robot Data:")
+        print(f"{'Joint':>8} {'Position (rad)':>15} {'Torque (Nm)':>15} {'Ext Torque (Nm)':>18}")
+        print(f"{'-'*8} {'-'*15} {'-'*15} {'-'*18}")
+        for i in range(7):
+            print(f"Joint {i+1:2d}: {bob_joints[i]:10.4f}    {bob_torques[i]:10.4f}     {bob_ext_torques[i]:13.4f}")
         print()
         
         time.sleep(0.1)
