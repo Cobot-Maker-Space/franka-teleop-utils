@@ -98,7 +98,7 @@ int main(int argc, const char** argv) {
             std::array<double, 7>{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}}));
         }
 
-        if (thread_data.lock.try_lock()) {
+        // if (thread_data.lock.try_lock()) {
           if (thread_data.updated == true) {
 #ifdef REPORT_RATE
             thread_data.counter++;
@@ -113,11 +113,11 @@ int main(int argc, const char** argv) {
             }
 
             //thread_data.updated = false;
-            thread_data.lock.unlock();
+            // thread_data.lock.unlock();
             return torques;
           }
-          thread_data.lock.unlock();
-        }
+          // thread_data.lock.unlock();
+        // }
 
         return torques;
     };
@@ -174,7 +174,6 @@ int main(int argc, const char** argv) {
 
     while (thread_data.running) {
       try {
-        std::cout << "Robot moving" << std::endl;
         robot.control(control_callback, rate_limit, cutoff_freq);
       }
       catch (const franka::Exception& ex) {
