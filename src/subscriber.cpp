@@ -173,6 +173,7 @@ int main(int argc, const char** argv) {
 
     while (thread_data.running) {
       try {
+        std::cout << "Robot moving" << std::endl;
         robot.control(control_callback, rate_limit, cutoff_freq);
       }
       catch (const franka::Exception& ex) {
