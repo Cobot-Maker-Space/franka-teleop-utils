@@ -137,6 +137,8 @@ void SubscribeThread::operator()() const {
     if (state.getTime() > last_received_time && thread_data.lock.try_lock()) {
       thread_data.updated = true;
       last_received_time = state.getTime();
+      thread_data.packet_count++;
+      std::cout << "Packet " << thread_data.packet_count << " received" << std::endl;
       leader_pos[0] = state.getJoint1Pos();
       leader_pos[1] = state.getJoint2Pos();
       leader_pos[2] = state.getJoint3Pos();

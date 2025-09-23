@@ -34,6 +34,7 @@ struct thread_data {
   std::atomic_bool running{ true };
   bool updated = false;
   bool first_packet_received = false;
+  int packet_count = 0;
 #ifdef REPORT_RATE
   int counter = 0;
 #endif
