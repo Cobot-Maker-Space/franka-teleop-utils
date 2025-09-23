@@ -103,6 +103,7 @@ int main(int argc, const char** argv) {
 #ifdef REPORT_RATE
             thread_data.counter++;
 #endif
+            std::cout << "Robot command: Moving to new position" << std::endl;
             std::array<double, 7> coriolis = model.coriolis(state);
             for (size_t i = 0; i < 7; i++) {
               torques[i] =
