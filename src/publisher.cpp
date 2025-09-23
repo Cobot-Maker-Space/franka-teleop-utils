@@ -16,6 +16,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include <iostream>
+#include <chrono>
 
 #include <franka/exception.h>
 
@@ -60,11 +61,13 @@ int main(int argc, const char** argv) {
 	franka::Torques torques = franka::Torques(
 		std::array<double, 7>{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}});
 	RobotState::Builder state_builder = message.initRoot<RobotState>();
-	uint64_t robot_time = 0;
 
-	auto control_callback = [&robot_time, &state_builder, &thread_data, &torques](
+	auto control_callback = [&state_builder, &thread_data, &torques](
 		const franka::RobotState& state, franka::Duration time_step) -> franka::Torques {
-			robot_time += time_step.toMSec();
+			// Get current Unix timestamp in milliseconds
+			uint64_t robot_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::system_clock::now().time_since_epoch()
+			).count();
 			if (!thread_data.running) {
 				return franka::MotionFinished(torques);
 			}
@@ -85,6 +88,20 @@ int main(int argc, const char** argv) {
 				state_builder.setJoint5Vel(state.dq[4]);
 				state_builder.setJoint6Vel(state.dq[5]);
 				state_builder.setJoint7Vel(state.dq[6]);
+				state_builder.setJoint1Torque(state.tau_J[0]);
+				state_builder.setJoint2Torque(state.tau_J[1]);
+				state_builder.setJoint3Torque(state.tau_J[2]);
+				state_builder.setJoint4Torque(state.tau_J[3]);
+				state_builder.setJoint5Torque(state.tau_J[4]);
+				state_builder.setJoint6Torque(state.tau_J[5]);
+				state_builder.setJoint7Torque(state.tau_J[6]);
+				state_builder.setJoint1ExtTorque(state.tau_ext_hat_filtered[0]);
+				state_builder.setJoint2ExtTorque(state.tau_ext_hat_filtered[1]);
+				state_builder.setJoint3ExtTorque(state.tau_ext_hat_filtered[2]);
+				state_builder.setJoint4ExtTorque(state.tau_ext_hat_filtered[3]);
+				state_builder.setJoint5ExtTorque(state.tau_ext_hat_filtered[4]);
+				state_builder.setJoint6ExtTorque(state.tau_ext_hat_filtered[5]);
+				state_builder.setJoint7ExtTorque(state.tau_ext_hat_filtered[6]);
 				thread_data.lock.unlock();
 #ifdef REPORT_RATE
 				thread_data.counter++;
