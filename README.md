@@ -87,3 +87,10 @@ Used for Embrace Angels, takes two recordings and plays them back, one on each a
 ### recorder.py
 
 Used for Embrace Angels, makes recordings from both arms.
+Command line arguments:
+
+* -i / --iface: Network interface to listen on
+* -a / --addr: Your IP address to listen on
+* -m / -maddr: Multicast address to listen on
+
+TODO: These values should be read from a configuration file, and in the case of interface name and IP address, automatically discovered.
