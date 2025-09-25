@@ -12,10 +12,10 @@ capnp.remove_import_hook()
 robotstate_capnp = capnp.load("robot-state.capnp")
 
 VINCENT_HOST = "224.3.29.71"
-VINCENT_PORT = 49187
+VINCENT_PORT = 49188
 BOB_HOST = "224.3.29.71"
-BOB_PORT = 49189
-MESSAGE_SIZE = 136
+BOB_PORT = 49186
+MESSAGE_SIZE = 248
 BASE_PATH = "/Users/pszdp1/Library/CloudStorage/OneDrive-TheUniversityofNottingham/Development/embrace-angels/eapy/recordings"
 
 
@@ -61,27 +61,39 @@ def play(name: str, file: pathlib.Path, host: str, port: int):
 
 
 def main(argv):
-    if len(argv) > 1:
-        if argv[1] == "r":
+    # Check for robot-specific flags
+    bob_only = "--bob-only" in argv
+    vincent_only = "--vincent-only" in argv
+    
+    # Remove flags from argv for path processing
+    filtered_argv = [arg for arg in argv if arg not in ["--bob-only", "--vincent-only"]]
+    
+    if len(filtered_argv) > 1:
+        if filtered_argv[1] == "r":
             path = get_random(BASE_PATH)
         else:
-            path = pathlib.Path(BASE_PATH, argv[1])
+            path = pathlib.Path(BASE_PATH, filtered_argv[1])
     else:
         path = get_most_recent(BASE_PATH)
 
     threads = []
 
-    threads.append(
-        threading.Thread(
-            target=play,
-            args=("Vincent", pathlib.Path(path, "vincent"), VINCENT_HOST, VINCENT_PORT),
+    # Add Vincent thread unless bob-only flag is specified
+    if not bob_only:
+        threads.append(
+            threading.Thread(
+                target=play,
+                args=("Vincent", pathlib.Path(path, "vincent"), VINCENT_HOST, VINCENT_PORT),
+            )
         )
-    )
-    threads.append(
-        threading.Thread(
-            target=play, args=("Bob", pathlib.Path(path, "bob"), BOB_HOST, BOB_PORT)
+    
+    # Add Bob thread unless vincent-only flag is specified
+    if not vincent_only:
+        threads.append(
+            threading.Thread(
+                target=play, args=("Bob", pathlib.Path(path, "bob"), BOB_HOST, BOB_PORT)
+            )
         )
-    )
 
     for t in threads:
         t.start()
