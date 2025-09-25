@@ -130,6 +130,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Record robot teleoperation data")
     parser.add_argument("--vincent-name", help="Custom filename for Vincent robot recording")
     parser.add_argument("--bob-name", help="Custom filename for Bob robot recording")
+    parser.add_argument("--folder-name", help="Name for the recording folder (will contain bob and vincent files)")
     parser.add_argument("-i", "--iface", help="Interface name to listen on", type=str)
     parser.add_argument("-a", "--addr", help="IP address to listeb on", type=str)
     parser.add_argument("-m", "--maddr", help="Multicast IP address to listen on", type=str)
@@ -162,7 +163,14 @@ if __name__ == "__main__":
     bsock.bind(("", BOB_PORT))
 
     # Create output directory and files
-    if args.vincent_name or args.bob_name:
+    if args.folder_name:
+        # If folder name provided, create that folder with bob and vincent files inside
+        outdir = pathlib.Path(BASE_PATH, args.folder_name)
+        outdir.mkdir(parents=True, exist_ok=True)
+
+        vfile = pathlib.Path(outdir, "vincent")
+        bfile = pathlib.Path(outdir, "bob")
+    elif args.vincent_name or args.bob_name:
         # If custom names provided, use recordings folder directly
         outdir = pathlib.Path(BASE_PATH)
         outdir.mkdir(exist_ok=True)
