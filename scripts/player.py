@@ -17,6 +17,7 @@ BOB_HOST = "224.3.29.71"
 BOB_PORT = 49186
 MESSAGE_SIZE = 248
 BASE_PATH = "/Users/pszdp1/Library/CloudStorage/OneDrive-TheUniversityofNottingham/Development/embrace-angels/eapy/recordings"
+BASE_PATH = "recordings"
 
 
 def get_most_recent(base_path):
