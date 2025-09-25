@@ -47,6 +47,9 @@ def play(name: str, file: pathlib.Path, host: str, port: int):
         lasttime = basetime
         print(f"{lasttime}: {name}", flush=True)
         sock.sendto(buf, (host, port))
+        
+        # Pause for 5 seconds after sending the first packet
+        time.sleep(5)
 
         while buf := f.read(MESSAGE_SIZE):
             with robotstate_capnp.RobotState.from_bytes(buf) as state:
