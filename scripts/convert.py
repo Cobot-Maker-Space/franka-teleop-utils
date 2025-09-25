@@ -7,9 +7,9 @@ import capnp
 capnp.remove_import_hook()
 robotstate_capnp = capnp.load("../messages/robot-state.capnp")
 
-MESSAGE_SIZE = 248  # Updated to include external torque values
+MESSAGE_SIZE = 264  # Updated to include external torque values and gripper fields
 
-print("Timestamp,Position1,Position2,Position3,Position4,Position5,Position6,Position7,Velocity1,Velocity2,Velocity3,Velocity4,Velocity5,Velocity6,Velocity7,Torque1,Torque2,Torque3,Torque4,Torque5,Torque6,Torque7,ExtTorque1,ExtTorque2,ExtTorque3,ExtTorque4,ExtTorque5,ExtTorque6,ExtTorque7")
+print("Timestamp,Position1,Position2,Position3,Position4,Position5,Position6,Position7,Velocity1,Velocity2,Velocity3,Velocity4,Velocity5,Velocity6,Velocity7,Torque1,Torque2,Torque3,Torque4,Torque5,Torque6,Torque7,ExtTorque1,ExtTorque2,ExtTorque3,ExtTorque4,ExtTorque5,ExtTorque6,ExtTorque7,GripperWidth,GripperGrasped")
 
 with open(sys.argv[1], "rb") as f:
     while buf := f.read(MESSAGE_SIZE):
@@ -44,5 +44,7 @@ with open(sys.argv[1], "rb") as f:
             print(f"{state.joint4ExtTorque},", end="")
             print(f"{state.joint5ExtTorque},", end="")
             print(f"{state.joint6ExtTorque},", end="")
-            print(f"{state.joint7ExtTorque}")
+            print(f"{state.joint7ExtTorque},", end="")
+            print(f"{state.gripperWidth},", end="")
+            print(f"{state.gripperIsGrasped}")
 

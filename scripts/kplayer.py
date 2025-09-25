@@ -12,7 +12,7 @@ robotstate_capnp = capnp.load("robot-state.capnp")
 
 ROBOT_HOST = "224.3.29.71"
 ROBOT_PORT = 49187
-MESSAGE_SIZE = 136
+MESSAGE_SIZE = 264
 
 frequency = 20
 
@@ -39,6 +39,24 @@ def play(name: str, file: pathlib.Path, host: str, port: int):
             state.joint5Vel = 0
             state.joint6Vel = 0
             state.joint7Vel = 0
+            # Initialize torque fields with default values
+            state.joint1Torque = 0.0
+            state.joint2Torque = 0.0
+            state.joint3Torque = 0.0
+            state.joint4Torque = 0.0
+            state.joint5Torque = 0.0
+            state.joint6Torque = 0.0
+            state.joint7Torque = 0.0
+            state.joint1ExtTorque = 0.0
+            state.joint2ExtTorque = 0.0
+            state.joint3ExtTorque = 0.0
+            state.joint4ExtTorque = 0.0
+            state.joint5ExtTorque = 0.0
+            state.joint6ExtTorque = 0.0
+            state.joint7ExtTorque = 0.0
+            # Initialize gripper fields with default values
+            state.gripperWidth = 0.0
+            state.gripperIsGrasped = False
             sock.sendto(state.to_bytes(), (host, port))
             time.sleep(20 / 100)
 

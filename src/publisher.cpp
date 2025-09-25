@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <chrono>
 
 #include <franka/exception.h>
+#include <franka/gripper.h>
 
 #include "memory_outputstream.h"
 #include "motion_generator.h"
@@ -60,9 +61,23 @@ int main(int argc, const char** argv) {
 	configure_robot(config, robot);
 	franka::Torques torques = franka::Torques(
 		std::array<double, 7>{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}});
+	
+	// Initialize gripper connection (optional)
+	std::unique_ptr<franka::Gripper> gripper;
+	bool gripper_enabled = config["robot"]["gripper"]["enabled"].as<bool>(false);
+	if (gripper_enabled) {
+		try {
+			gripper = std::make_unique<franka::Gripper>(config["robot"]["host"].as<std::string>());
+		} catch (const franka::Exception& ex) {
+			std::cerr << "Gripper connection failed: " << ex.what() << std::endl;
+			std::cerr << "Continuing without gripper..." << std::endl;
+			gripper_enabled = false;
+		}
+	}
+	
 	RobotState::Builder state_builder = message.initRoot<RobotState>();
 
-	auto control_callback = [&state_builder, &thread_data, &torques](
+	auto control_callback = [&state_builder, &thread_data, &torques, &gripper, gripper_enabled](
 		const franka::RobotState& state, franka::Duration time_step) -> franka::Torques {
 			// Get current Unix timestamp in milliseconds
 			uint64_t robot_time = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -102,6 +117,24 @@ int main(int argc, const char** argv) {
 				state_builder.setJoint5ExtTorque(state.tau_ext_hat_filtered[4]);
 				state_builder.setJoint6ExtTorque(state.tau_ext_hat_filtered[5]);
 				state_builder.setJoint7ExtTorque(state.tau_ext_hat_filtered[6]);
+				
+				// Read gripper state if enabled
+				if (gripper_enabled && gripper) {
+					try {
+						franka::GripperState gripper_state = gripper->readOnce();
+						state_builder.setGripperWidth(gripper_state.width);
+						state_builder.setGripperIsGrasped(gripper_state.is_grasped);
+					} catch (const franka::Exception& ex) {
+						// Set default values on gripper read failure
+						state_builder.setGripperWidth(0.0);
+						state_builder.setGripperIsGrasped(false);
+					}
+				} else {
+					// Set default values when gripper is disabled
+					state_builder.setGripperWidth(0.0);
+					state_builder.setGripperIsGrasped(false);
+				}
+				
 				thread_data.lock.unlock();
 #ifdef REPORT_RATE
 				thread_data.counter++;

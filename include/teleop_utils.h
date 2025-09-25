@@ -25,9 +25,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 /*
  * Message size in bytes. Calculated by producing a message and checking size
- * in sample code.
+ * in sample code. Updated for gripper fields: gripperWidth, gripperIsGrasped.
  */
-const size_t MESSAGE_SIZE = 248;
+const size_t MESSAGE_SIZE = 264;
 
 struct thread_data {
   std::mutex lock;
@@ -71,10 +71,14 @@ public:
   SubscribeThread(
     std::array<double, 7>& leader_pos,
     std::array<double, 7>& leader_vel,
+    double& leader_gripper_width,
+    bool& leader_gripper_grasped,
     asio::ip::udp::socket& socket,
     struct thread_data& thread_data) :
     leader_pos(leader_pos),
     leader_vel(leader_vel),
+    leader_gripper_width(leader_gripper_width),
+    leader_gripper_grasped(leader_gripper_grasped),
     socket(socket),
     thread_data(thread_data) {
   };
@@ -82,6 +86,8 @@ public:
 private:
   std::array<double, 7>& leader_pos;
   std::array<double, 7>& leader_vel;
+  double& leader_gripper_width;
+  bool& leader_gripper_grasped;
   asio::ip::udp::socket& socket;
   struct thread_data& thread_data;
 };

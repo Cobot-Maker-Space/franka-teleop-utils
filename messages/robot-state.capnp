@@ -29,4 +29,6 @@ struct RobotState {
   joint5ExtTorque @26 :Float64;
   joint6ExtTorque @27 :Float64;
   joint7ExtTorque @28 :Float64;
+  gripperWidth @29 :Float64;
+  gripperIsGrasped @30 :Bool;
 }

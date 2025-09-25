@@ -15,8 +15,8 @@ robotstate_capnp = capnp.load("../messages/robot-state.capnp")
 
 VINCENT_PORT = 49186
 BOB_PORT = 49188
-MESSAGE_SIZE = 248
-BASE_PATH = "../recordings"
+MESSAGE_SIZE = 264
+BASE_PATH = "recordings"
 
 # Shared packet counters and robot data
 packet_counts = {"vincent": 0, "bob": 0}

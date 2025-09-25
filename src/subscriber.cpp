@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <iostream>
 
 #include <franka/exception.h>
+#include <franka/gripper.h>
 #include <franka/model.h>
 
 #include "motion_generator.h"
@@ -64,13 +65,35 @@ int main(int argc, const char** argv) {
 
   std::array<double, 7> leader_pos = { 0, 0, 0, 0, 0, 0, 0 };
   std::array<double, 7> leader_vel = { 0, 0, 0, 0, 0, 0, 0 };
+  
+  // Gripper state variables
+  double leader_gripper_width = 0.0;
+  bool leader_gripper_grasped = false;
 
   std::thread subscribe_thread(SubscribeThread{
-    leader_pos, leader_vel, socket, thread_data });
+    leader_pos, leader_vel, leader_gripper_width, leader_gripper_grasped, socket, thread_data });
 
   franka::Robot robot(config["robot"]["host"].as<std::string>());
   configure_robot(config, robot);
   auto model = robot.loadModel();
+  
+  // Initialize gripper connection (optional)
+  std::unique_ptr<franka::Gripper> gripper;
+  bool gripper_enabled = config["robot"]["gripper"]["enabled"].as<bool>(false);
+  double gripper_force = config["robot"]["gripper"]["grasp_force"].as<double>(70.0);
+  double gripper_speed = config["robot"]["gripper"]["grasp_speed"].as<double>(0.05);
+  double width_threshold = config["robot"]["gripper"]["width_threshold"].as<double>(0.001);
+  
+  if (gripper_enabled) {
+    try {
+      gripper = std::make_unique<franka::Gripper>(config["robot"]["host"].as<std::string>());
+      gripper->homing();
+    } catch (const franka::Exception& ex) {
+      std::cerr << "Gripper connection failed: " << ex.what() << std::endl;
+      std::cerr << "Continuing without gripper..." << std::endl;
+      gripper_enabled = false;
+    }
+  }
   const std::array<double, 7> stiffness = { {
     config["robot"]["stiffness"]["joint1"].as<double>(),
     config["robot"]["stiffness"]["joint2"].as<double>(),
@@ -89,8 +112,14 @@ int main(int argc, const char** argv) {
     config["robot"]["damping"]["joint7"].as<double>()} };
   std::array<double, 7> torques = { 0, 0, 0, 0, 0, 0, 0 };
 
+  // Gripper state tracking variables
+  double last_leader_gripper_width = 0.0;
+  bool last_leader_gripper_grasped = false;
+  
   auto control_callback = [
-    &damping, &model, &leader_pos, &leader_vel, &stiffness, &thread_data, &torques](
+    &damping, &model, &leader_pos, &leader_vel, &stiffness, &thread_data, &torques,
+    &leader_gripper_width, &leader_gripper_grasped, &gripper, gripper_enabled,
+    gripper_force, gripper_speed, width_threshold, &last_leader_gripper_width, &last_leader_gripper_grasped](
       const franka::RobotState& state, franka::Duration) -> franka::Torques {
 
         if (!thread_data.running) {
@@ -109,6 +138,35 @@ int main(int argc, const char** argv) {
                 stiffness[i] *
                 (leader_pos[i] - state.q[i])
                 - damping[i] * state.dq[i] + coriolis[i];
+            }
+            
+            // Gripper control logic (non-blocking)
+            if (gripper_enabled && gripper) {
+              // Check for gripper state changes
+              bool width_changed = std::abs(leader_gripper_width - last_leader_gripper_width) > width_threshold;
+              bool grasp_state_changed = leader_gripper_grasped != last_leader_gripper_grasped;
+              
+              if (width_changed || grasp_state_changed) {
+                // Launch gripper command in separate thread to avoid blocking control loop
+                std::thread gripper_thread([&gripper, leader_gripper_width, leader_gripper_grasped, gripper_force, gripper_speed]() {
+                  try {
+                    if (leader_gripper_grasped) {
+                      // Attempt to grasp at the specified width
+                      gripper->grasp(leader_gripper_width, gripper_speed, gripper_force);
+                    } else {
+                      // Move to specified width without grasping force
+                      gripper->move(leader_gripper_width, gripper_speed);
+                    }
+                  } catch (const franka::Exception& ex) {
+                    // Silently handle gripper errors to not disturb robot control
+                  }
+                });
+                gripper_thread.detach();
+                
+                // Update tracking variables
+                last_leader_gripper_width = leader_gripper_width;
+                last_leader_gripper_grasped = leader_gripper_grasped;
+              }
             }
 
             //thread_data.updated = false;

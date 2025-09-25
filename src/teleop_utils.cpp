@@ -152,6 +152,10 @@ void SubscribeThread::operator()() const {
       leader_vel[5] = state.getJoint6Vel();
       leader_vel[6] = state.getJoint7Vel();
       
+      // Read gripper state
+      leader_gripper_width = state.getGripperWidth();
+      leader_gripper_grasped = state.getGripperIsGrasped();
+      
       if (!thread_data.first_packet_received) {
         thread_data.first_packet_received = true;
       }

@@ -11,6 +11,11 @@ robot:
   autorecovery:
     enabled: true
     wait_time_ms: 500
+  gripper:
+    enabled: false
+    grasp_force: 70.0
+    grasp_speed: 0.05
+    width_threshold: 0.001
   cutoff_frequency: 1000.0
   rate_limit: true
   initial_position:
