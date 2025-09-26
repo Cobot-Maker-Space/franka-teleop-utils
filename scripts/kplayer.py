@@ -12,7 +12,7 @@ robotstate_capnp = capnp.load("robot-state.capnp")
 
 ROBOT_HOST = "224.3.29.71"
 ROBOT_PORT = 49187
-MESSAGE_SIZE = 136
+MESSAGE_SIZE = 248
 
 frequency = 20
 
@@ -20,8 +20,9 @@ def play(name: str, file: pathlib.Path, host: str, port: int):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     with open(file, "r") as f:
         csvreader = csv.reader(f, delimiter=',', quotechar='"')
+        first_row = True
+        
         for row in csvreader:
-
             state = robotstate_capnp.RobotState()
             state.time = int(time.time() * 1000)
             state.joint1Pos = float(row[0].replace('\ufeff', ''))
@@ -39,8 +40,29 @@ def play(name: str, file: pathlib.Path, host: str, port: int):
             state.joint5Vel = 0
             state.joint6Vel = 0
             state.joint7Vel = 0
+            state.joint1Torque = 0
+            state.joint2Torque = 0
+            state.joint3Torque = 0
+            state.joint4Torque = 0
+            state.joint5Torque = 0
+            state.joint6Torque = 0
+            state.joint7Torque = 0
+            state.joint1ExtTorque = 0
+            state.joint2ExtTorque = 0
+            state.joint3ExtTorque = 0
+            state.joint4ExtTorque = 0
+            state.joint5ExtTorque = 0
+            state.joint6ExtTorque = 0
+            state.joint7ExtTorque = 0
+            
             sock.sendto(state.to_bytes(), (host, port))
-            time.sleep(20 / 100)
+            
+            if first_row:
+                print(f"Sent first position for {name}, waiting 5 seconds...")
+                time.sleep(5.0)  # 5 second delay after first position
+                first_row = False
+            else:
+                time.sleep(20 / 100)  # Normal timing for subsequent positions
 
 
 
