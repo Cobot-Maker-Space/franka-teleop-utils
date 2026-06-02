@@ -17,6 +17,8 @@ set(Franka_DIR "" CACHE FILEPATH "LibFranka install path")
 
 option(REPORT_RATE "Report sending/receiving rates" OFF)
 
+set(FOUND_LIBATOMIC TRUE) # Required due to a bug in the Ubuntu Cap'n'Proto package
+
 find_package(CapnProto REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Franka REQUIRED)
