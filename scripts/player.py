@@ -1,57 +1,44 @@
+import argparse
 import pathlib
-import random
 import socket
-import struct
-import sys
 import threading
 import time
 
 import capnp
 
 capnp.remove_import_hook()
-robotstate_capnp = capnp.load("robot-state.capnp")
-
-VINCENT_HOST = "224.3.29.71"
-VINCENT_PORT = 49188
-BOB_HOST = "224.3.29.71"
-BOB_PORT = 49186
-MESSAGE_SIZE = 248
-BASE_PATH = "/Users/pszdp1/Library/CloudStorage/OneDrive-TheUniversityofNottingham/Development/embrace-angels/eapy/recordings"
-BASE_PATH = "recordings"
+robotstate_capnp = capnp.load(
+    str(
+        pathlib.Path(__file__).parent.parent.joinpath(
+            pathlib.Path("messages/robot-state.capnp")
+        )
+    )
+)
 
 
-def get_most_recent(base_path):
-    dirs = []
-    for d in pathlib.Path.iterdir(pathlib.Path(base_path)):
-        if d.is_dir():
-            dirs.append(d)
-    dirs.sort(key=lambda d: int(d.name))
-    return dirs[-1]
+def compute_message_size_bytes() -> int:
+    message = robotstate_capnp.RobotState()
+    segments = message.to_segments()
+    segment_table_size = (len(segments) // 2) + 1
+    words = segment_table_size + sum(len(seg) // 8 for seg in segments)
+    return words * 8
 
 
-def get_random(base_path):
-    dirs = []
-    for d in pathlib.Path.iterdir(pathlib.Path(base_path)):
-        if d.is_dir():
-            dirs.append(d)
-    return dirs[random.randint(0, len(dirs) - 1)]
-
-
-def play(name: str, file: pathlib.Path, host: str, port: int):
+def play(name: str, file: pathlib.Path, host: str, port: int, counters, is_running):
+    message_size = compute_message_size_bytes()
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     with open(file, "rb") as f:
-        buf = f.read(MESSAGE_SIZE)
+        buf = f.read(message_size)
         starttime = round(time.time() * 1000)
         with robotstate_capnp.RobotState.from_bytes(buf) as state:
             basetime = state.time
         lasttime = basetime
-        print(f"{lasttime}: {name}", flush=True)
         sock.sendto(buf, (host, port))
-        
-        # Pause for 5 seconds after sending the first packet
-        # time.sleep(5)
 
-        while buf := f.read(MESSAGE_SIZE):
+        # Pause for 5 seconds after sending the first packet
+        time.sleep(5)
+
+        while (buf := f.read(message_size)) and is_running():
             with robotstate_capnp.RobotState.from_bytes(buf) as state:
                 if state.time < lasttime:
                     continue
@@ -61,49 +48,54 @@ def play(name: str, file: pathlib.Path, host: str, port: int):
                     time.sleep(((starttime + timediff) - now) / 1000)
                 lasttime = state.time
                 sock.sendto(buf, (host, port))
-                print(f"{lasttime}: {name}", flush=True)
+                counters[name] += 1
 
 
-def main(argv):
-    # Check for robot-specific flags
-    bob_only = "--bob-only" in argv
-    vincent_only = "--vincent-only" in argv
-    
-    # Remove flags from argv for path processing
-    filtered_argv = [arg for arg in argv if arg not in ["--bob-only", "--vincent-only"]]
-    
-    if len(filtered_argv) > 1:
-        if filtered_argv[1] == "r":
-            path = get_random(BASE_PATH)
-        else:
-            path = pathlib.Path(BASE_PATH, filtered_argv[1])
-    else:
-        path = get_most_recent(BASE_PATH)
+def display_status(counters: dict[str, int]):
+    # Clear screen and hide cursor
+    print("\033[2J\033[H\033[?25l")
+
+    while True:
+        print("\033[H\033[2J")
+        for k, v in counters.items():
+            print(f"{k}: {v} messages sent")
+        time.sleep(1 / 10)
+
+
+def main():
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(
+        "-r", "--robot", nargs=4, action="append"
+    )  # name host port path
+    args = parser.parse_args()
 
     threads = []
+    counters = {}
 
-    # Add Vincent thread unless bob-only flag is specified
-    if not bob_only:
+    running = True
+
+    def is_running():
+        return running
+
+    for r in args.robot:
+        counters[r[0]] = 0
         threads.append(
             threading.Thread(
                 target=play,
-                args=("Vincent", pathlib.Path(path, "vincent"), VINCENT_HOST, VINCENT_PORT),
-            )
-        )
-    
-    # Add Bob thread unless vincent-only flag is specified
-    if not vincent_only:
-        threads.append(
-            threading.Thread(
-                target=play, args=("Bob", pathlib.Path(path, "bob"), BOB_HOST, BOB_PORT)
+                args=(r[0], pathlib.Path(r[3]), r[1], int(r[2]), counters, is_running),
             )
         )
 
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    threading.Thread(target=display_status, args=(counters,), daemon=True).start()
+
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    except KeyboardInterrupt:
+        running = False
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()
