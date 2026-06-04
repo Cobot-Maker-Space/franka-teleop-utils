@@ -31,7 +31,7 @@ def play(
     file: pathlib.Path,
     host: str,
     port: int,
-    counters,
+    counters: dict[str, int],
     is_running: Callable[[], bool],
 ):
     message_size = compute_message_size_bytes()
@@ -78,8 +78,8 @@ def main() -> None:
     )  # name host port path
     args = parser.parse_args()
 
-    threads = []
-    counters = {}
+    threads: list[threading.Thread] = []
+    counters: dict[str, int] = {}
 
     running = True
 
