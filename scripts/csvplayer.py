@@ -73,7 +73,7 @@ def main():
         "-p", "--port", help="Robot port number", type=int, required=True
     )
     parser.add_argument(
-        "-f", "--frequency", help="Playback frequency", type=str, required=True
+        "-f", "--frequency", help="Playback frequency", type=int, required=True
     )
     parser.add_argument("csvfile", help="Path to CSV file to play from", type=str)
     args = parser.parse_args()
