@@ -4,6 +4,8 @@ import socket
 import threading
 import time
 
+from collections.abc import Callable
+
 import capnp
 
 capnp.remove_import_hook()
@@ -24,7 +26,14 @@ def compute_message_size_bytes() -> int:
     return words * 8
 
 
-def play(name: str, file: pathlib.Path, host: str, port: int, counters, is_running):
+def play(
+    name: str,
+    file: pathlib.Path,
+    host: str,
+    port: int,
+    counters,
+    is_running: Callable[[], bool],
+):
     message_size = compute_message_size_bytes()
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     with open(file, "rb") as f:
@@ -62,7 +71,7 @@ def display_status(counters: dict[str, int]):
         time.sleep(1 / 10)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument(
         "-r", "--robot", nargs=4, action="append"
@@ -74,7 +83,7 @@ def main():
 
     running = True
 
-    def is_running():
+    def is_running() -> bool:
         return running
 
     for r in args.robot:
@@ -96,7 +105,7 @@ def main():
     except KeyboardInterrupt:
         running = False
 
-    print("\033[?25h") # Show cursor
+    print("\033[?25h")  # Show cursor
     print("Playback complete")
 
 
