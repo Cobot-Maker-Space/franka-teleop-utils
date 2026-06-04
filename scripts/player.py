@@ -96,6 +96,9 @@ def main():
     except KeyboardInterrupt:
         running = False
 
+    print("\033[?25h") # Show cursor
+    print("Playback complete")
+
 
 if __name__ == "__main__":
     main()
