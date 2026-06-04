@@ -38,7 +38,6 @@ def play(
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     with open(file, "rb") as f:
         buf = f.read(message_size)
-        starttime = round(time.time() * 1000)
         with robotstate_capnp.RobotState.from_bytes(buf) as state:
             basetime = state.time
         lasttime = basetime
@@ -47,6 +46,7 @@ def play(
         # Pause for 5 seconds after sending the first packet
         time.sleep(5)
 
+        starttime = round(time.time() * 1000)
         while (buf := f.read(message_size)) and is_running():
             with robotstate_capnp.RobotState.from_bytes(buf) as state:
                 if state.time < lasttime:
