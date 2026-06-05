@@ -63,7 +63,7 @@ int main(int argc, const char** argv) {
 	RobotState::Builder state_builder = message.initRoot<RobotState>();
 
 	auto control_callback = [&state_builder, &thread_data, &torques](
-		const franka::RobotState& state, franka::Duration time_step) -> franka::Torques {
+		const franka::RobotState& state, franka::Duration) -> franka::Torques {
 			// Get current Unix timestamp in milliseconds
 			uint64_t robot_time = std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::system_clock::now().time_since_epoch()
@@ -103,9 +103,6 @@ int main(int argc, const char** argv) {
 				state_builder.setJoint6ExtTorque(state.tau_ext_hat_filtered[5]);
 				state_builder.setJoint7ExtTorque(state.tau_ext_hat_filtered[6]);
 				thread_data.lock.unlock();
-#ifdef REPORT_RATE
-				thread_data.counter++;
-#endif
 			}
 			return torques;
 		};
@@ -127,10 +124,6 @@ int main(int argc, const char** argv) {
 	std::cout << "Robot ready, press enter to start." << std::endl;
 	std::cin.ignore();
 	std::cout << "Robot running, press CTRL-c to stop." << std::endl;
-
-#ifdef REPORT_RATE
-	std::thread report_thread(ReportThread{ "Publisher", thread_data });
-#endif
 
 	const bool rate_limit = config["robot"]["rate_limit"].as<bool>();
 	const double cutoff_freq = config["robot"]["cutoff_frequency"].as<double>();
@@ -159,11 +152,6 @@ int main(int argc, const char** argv) {
 	if (publish_thread.joinable()) {
 		publish_thread.join();
 	}
-#ifdef REPORT_RATE
-	if (report_thread.joinable()) {
-		report_thread.join();
-	}
-#endif
 
 	return EXIT_SUCCESS;
 }

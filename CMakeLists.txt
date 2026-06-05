@@ -15,8 +15,6 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 set(Franka_DIR "" CACHE FILEPATH "LibFranka install path")
 
-option(REPORT_RATE "Report sending/receiving rates" OFF)
-
 set(FOUND_LIBATOMIC TRUE) # Required due to a bug in the Ubuntu Cap'n'Proto package
 
 find_package(CapnProto REQUIRED)
@@ -33,10 +31,6 @@ include_directories(
   ${CMAKE_CURRENT_BINARY_DIR})
 
 add_definitions(${CAPNP_DEFINITIONS})
-
-if(REPORT_RATE)
-  add_definitions(-DREPORT_RATE)
-endif()
 
 capnp_generate_cpp(CAPNP_SRCS CAPNP_HDRS messages/robot-state.capnp)
 

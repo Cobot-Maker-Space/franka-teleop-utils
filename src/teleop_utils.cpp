@@ -23,6 +23,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "messages/robot-state.capnp.h"
 #include "teleop_utils.h"
 
+size_t compute_message_size() {
+  capnp::MallocMessageBuilder message{};
+  message.initRoot<RobotState>();
+  size_t sizeInWords = capnp::computeSerializedSizeInWords(message);
+  size_t totalBytes = sizeInWords * sizeof(::capnp::word);
+  return totalBytes;
+}
+
 void configure_robot(YAML::Node& config, franka::Robot& robot) {
   YAML::Node ltt = config["robot"]["collision_behaviour"]["lower_torque_thresholds"];
   YAML::Node utt = config["robot"]["collision_behaviour"]["upper_torque_thresholds"];
@@ -85,7 +93,7 @@ void configure_robot(YAML::Node& config, franka::Robot& robot) {
 }
 
 YAML::Node parse_options(int argc, const char** argv) {
-  cxxopts::Options options("sender", "Send robot state to receiver(s)");
+  cxxopts::Options options(argv[0]);
   options.add_options()
     ("c,config-file", "Path to configuration file", cxxopts::value<std::string>());
   auto poptions = options.parse(argc, argv);
@@ -99,8 +107,9 @@ YAML::Node parse_options(int argc, const char** argv) {
 }
 
 void PublishThread::operator()() const {
-  kj::byte buffer[MESSAGE_SIZE];
-  memset(buffer, 0, MESSAGE_SIZE);
+  const size_t message_size = compute_message_size();
+  kj::byte buffer[message_size];
+  memset(buffer, 0, message_size);
   MemoryOutputStream os(buffer);
   std::chrono::milliseconds sleep_time =
     std::chrono::milliseconds(static_cast<int>((1.0 / publish_rate * 1000.0)));
@@ -110,7 +119,7 @@ void PublishThread::operator()() const {
       if (thread_data.updated) {
         os.reset();
         capnp::writeMessage(os, message);
-        socket.send_to(asio::buffer(buffer, MESSAGE_SIZE), endpoint);
+        socket.send_to(asio::buffer(buffer, message_size), endpoint);
         thread_data.updated = false;
       }
       thread_data.lock.unlock();
@@ -120,12 +129,13 @@ void PublishThread::operator()() const {
 
 void SubscribeThread::operator()() const {
   double last_received_time = 0.0;
-  std::array<kj::byte, MESSAGE_SIZE> buffer;
+  const size_t message_size = compute_message_size();
+  std::vector<kj::byte> buffer(message_size);
   auto mbuffer = asio::buffer(buffer);
-  kj::ArrayPtr<kj::byte> buffer_array(buffer.data(), MESSAGE_SIZE);
+  kj::ArrayPtr<kj::byte> buffer_array(buffer.data(), message_size);
 
   while (thread_data.running) {
-    if (socket.receive(mbuffer) != MESSAGE_SIZE) {
+    if (socket.receive(mbuffer) != message_size) {
       std::cerr << "Error during message reception." << std::endl;
       continue;
     }
@@ -135,43 +145,27 @@ void SubscribeThread::operator()() const {
     RobotState::Reader state = reader.getRoot<RobotState>();
 
     if (state.getTime() > last_received_time && thread_data.lock.try_lock()) {
-      thread_data.updated = true;
       last_received_time = state.getTime();
-      leader_pos[0] = state.getJoint1Pos();
-      leader_pos[1] = state.getJoint2Pos();
-      leader_pos[2] = state.getJoint3Pos();
-      leader_pos[3] = state.getJoint4Pos();
-      leader_pos[4] = state.getJoint5Pos();
-      leader_pos[5] = state.getJoint6Pos();
-      leader_pos[6] = state.getJoint7Pos();
-      leader_vel[0] = state.getJoint1Vel();
-      leader_vel[1] = state.getJoint2Vel();
-      leader_vel[2] = state.getJoint3Vel();
-      leader_vel[3] = state.getJoint4Vel();
-      leader_vel[4] = state.getJoint5Vel();
-      leader_vel[5] = state.getJoint6Vel();
-      leader_vel[6] = state.getJoint7Vel();
-      
-      if (!thread_data.first_packet_received) {
-        thread_data.first_packet_received = true;
+      publisher_pos[0] = state.getJoint1Pos();
+      publisher_pos[1] = state.getJoint2Pos();
+      publisher_pos[2] = state.getJoint3Pos();
+      publisher_pos[3] = state.getJoint4Pos();
+      publisher_pos[4] = state.getJoint5Pos();
+      publisher_pos[5] = state.getJoint6Pos();
+      publisher_pos[6] = state.getJoint7Pos();
+      publisher_vel[0] = state.getJoint1Vel();
+      publisher_vel[1] = state.getJoint2Vel();
+      publisher_vel[2] = state.getJoint3Vel();
+      publisher_vel[3] = state.getJoint4Vel();
+      publisher_vel[4] = state.getJoint5Vel();
+      publisher_vel[5] = state.getJoint6Vel();
+      publisher_vel[6] = state.getJoint7Vel();
+
+      if (!thread_data.first_message_received) {
+        thread_data.first_message_received = true;
       }
-      
+
       thread_data.lock.unlock();
     }
   }
 }
-
-#ifdef REPORT_RATE
-void ReportThread::operator()() const {
-  std::cout << std::endl;
-  while (thread_data.running) {
-    if (thread_data.lock.try_lock()) {
-      std::cout << name << "update rate: "
-        << thread_data.counter << "hz" << std::endl;
-      thread_data.counter = 0;
-    }
-    thread_data.lock.unlock();
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-  }
-}
-#endif

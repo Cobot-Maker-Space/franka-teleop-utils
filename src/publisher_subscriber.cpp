@@ -72,12 +72,12 @@ int main(int argc, const char** argv) {
     };
   std::signal(SIGINT, signal_handler);
 
-  std::array<double, 7> leader_pos = { 0, 0, 0, 0, 0, 0, 0 };
-  std::array<double, 7> leader_vel = { 0, 0, 0, 0, 0, 0, 0 };
+  std::array<double, 7> publisher_pos = { 0, 0, 0, 0, 0, 0, 0 };
+  std::array<double, 7> publisher_vel = { 0, 0, 0, 0, 0, 0, 0 };
   capnp::MallocMessageBuilder message{};
 
   std::thread subscribe_thread(SubscribeThread{
-    leader_pos, leader_vel, sub_socket, sub_thread_data });
+    publisher_pos, publisher_vel, sub_socket, sub_thread_data });
 
   std::thread publish_thread(PublishThread{
     pub_socket,
@@ -110,7 +110,7 @@ int main(int argc, const char** argv) {
   uint64_t robot_time = 0;
 
   auto control_callback = [
-    &damping, &model, &leader_pos, &leader_vel, &pub_thread_data, &robot_time,
+    &damping, &model, &publisher_pos, &publisher_vel, &pub_thread_data, &robot_time,
     &state_builder, &stiffness, &sub_thread_data, &torques](
       const franka::RobotState& state, franka::Duration time_step) -> franka::Torques {
         robot_time += time_step.toMSec();
@@ -121,22 +121,13 @@ int main(int argc, const char** argv) {
         }
 
         if (sub_thread_data.lock.try_lock()) {
-          if (sub_thread_data.updated == true) {
-#ifdef REPORT_RATE
-            sub_thread_data.counter++;
-#endif
-            std::array<double, 7> coriolis = model.coriolis(state);
-            for (size_t i = 0; i < 7; i++) {
-              torques[i] =
-                stiffness[i] *
-                (leader_pos[i] - state.q[i])
-                - damping[i] * state.dq[i] + coriolis[i];
-              std::cout << "Torques: " << torques[1] << std::endl;
-            }
-
-            sub_thread_data.updated = false;
-            sub_thread_data.lock.unlock();
-            return torques;
+          std::array<double, 7> coriolis = model.coriolis(state);
+          for (size_t i = 0; i < 7; i++) {
+            torques[i] =
+              stiffness[i] *
+              (publisher_pos[i] - state.q[i])
+              - damping[i] * state.dq[i] + coriolis[i];
+            std::cout << "Torques: " << torques[1] << std::endl;
           }
           sub_thread_data.lock.unlock();
         }
@@ -158,10 +149,21 @@ int main(int argc, const char** argv) {
           state_builder.setJoint5Vel(state.dq[4]);
           state_builder.setJoint6Vel(state.dq[5]);
           state_builder.setJoint7Vel(state.dq[6]);
+          state_builder.setJoint1Torque(state.tau_J[0]);
+          state_builder.setJoint2Torque(state.tau_J[1]);
+          state_builder.setJoint3Torque(state.tau_J[2]);
+          state_builder.setJoint4Torque(state.tau_J[3]);
+          state_builder.setJoint5Torque(state.tau_J[4]);
+          state_builder.setJoint6Torque(state.tau_J[5]);
+          state_builder.setJoint7Torque(state.tau_J[6]);
+          state_builder.setJoint1ExtTorque(state.tau_ext_hat_filtered[0]);
+          state_builder.setJoint2ExtTorque(state.tau_ext_hat_filtered[1]);
+          state_builder.setJoint3ExtTorque(state.tau_ext_hat_filtered[2]);
+          state_builder.setJoint4ExtTorque(state.tau_ext_hat_filtered[3]);
+          state_builder.setJoint5ExtTorque(state.tau_ext_hat_filtered[4]);
+          state_builder.setJoint6ExtTorque(state.tau_ext_hat_filtered[5]);
+          state_builder.setJoint7ExtTorque(state.tau_ext_hat_filtered[6]);
           pub_thread_data.lock.unlock();
-#ifdef REPORT_RATE
-          pub_thread_data.counter++;
-#endif
         }
 
         return torques;
@@ -184,11 +186,6 @@ int main(int argc, const char** argv) {
   std::cout << "Robot ready, press enter to start." << std::endl;
   std::cin.ignore();
   std::cout << "Robot running, press CTRL-c to stop." << std::endl;
-
-#ifdef REPORT_RATE
-  std::thread pub_report_thread(ReportThread{ "Publisher", pub_thread_data });
-  std::thread sub_report_thread(ReportThread{ "Subscriber", sub_thread_data });
-#endif
 
   const bool rate_limit = config["robot"]["rate_limit"].as<bool>();
   const double cutoff_freq = config["robot"]["cutoff_frequency"].as<double>();
@@ -220,15 +217,13 @@ int main(int argc, const char** argv) {
   if (subscribe_thread.joinable()) {
     subscribe_thread.join();
   }
-#ifdef REPORT_RATE
-  if (pub_report_thread.joinable()) {
-    pub_report_thread.join();
-  }
-  if (sub_report_thread.joinable()) {
-    subscribe_thread.join();
-  }
-#endif
   if (sub_socket.is_open()) {
+    if (config["subscribe"]["multicast_host"]) {
+      sub_socket.set_option(
+        asio::ip::multicast::leave_group(
+          asio::ip::address::from_string(
+            config["subscribe"]["multicast_host"].as<std::string>())));
+    }
     sub_socket.close();
   }
 

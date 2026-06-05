@@ -23,20 +23,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <yaml-cpp/yaml.h>
 
-/*
- * Message size in bytes. Calculated by producing a message and checking size
- * in sample code.
- */
-const size_t MESSAGE_SIZE = 248;
+
+size_t compute_message_size();
 
 struct thread_data {
   std::mutex lock;
   std::atomic_bool running{ true };
   bool updated = false;
-  bool first_packet_received = false;
-#ifdef REPORT_RATE
-  int counter = 0;
-#endif
+  bool first_message_received = false;
 };
 
 void configure_robot(YAML::Node& config, franka::Robot& robot);
@@ -69,32 +63,19 @@ private:
 class SubscribeThread {
 public:
   SubscribeThread(
-    std::array<double, 7>& leader_pos,
-    std::array<double, 7>& leader_vel,
+    std::array<double, 7>& publisher_pos,
+    std::array<double, 7>& publisher_vel,
     asio::ip::udp::socket& socket,
     struct thread_data& thread_data) :
-    leader_pos(leader_pos),
-    leader_vel(leader_vel),
+    publisher_pos(publisher_pos),
+    publisher_vel(publisher_vel),
     socket(socket),
     thread_data(thread_data) {
   };
   void operator()() const;
 private:
-  std::array<double, 7>& leader_pos;
-  std::array<double, 7>& leader_vel;
+  std::array<double, 7>& publisher_pos;
+  std::array<double, 7>& publisher_vel;
   asio::ip::udp::socket& socket;
   struct thread_data& thread_data;
 };
-
-#ifdef REPORT_RATE
-class ReportThread {
-public:
-  ReportThread(std::string name, struct thread_data& thread_data)
-    : name(name), thread_data(thread_data) {
-  };
-  void operator()() const;
-private:
-  std::string name;
-  struct thread_data& thread_data;
-};
-#endif

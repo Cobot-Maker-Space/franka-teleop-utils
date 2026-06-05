@@ -62,11 +62,11 @@ int main(int argc, const char** argv) {
     };
   std::signal(SIGINT, signal_handler);
 
-  std::array<double, 7> leader_pos = { 0, 0, 0, 0, 0, 0, 0 };
-  std::array<double, 7> leader_vel = { 0, 0, 0, 0, 0, 0, 0 };
+  std::array<double, 7> publisher_pos = { 0, 0, 0, 0, 0, 0, 0 };
+  std::array<double, 7> publisher_vel = { 0, 0, 0, 0, 0, 0, 0 };
 
   std::thread subscribe_thread(SubscribeThread{
-    leader_pos, leader_vel, socket, thread_data });
+    publisher_pos, publisher_vel, socket, thread_data });
 
   franka::Robot robot(config["robot"]["host"].as<std::string>());
   configure_robot(config, robot);
@@ -90,7 +90,7 @@ int main(int argc, const char** argv) {
   std::array<double, 7> torques = { 0, 0, 0, 0, 0, 0, 0 };
 
   auto control_callback = [
-    &damping, &model, &leader_pos, &leader_vel, &stiffness, &thread_data, &torques](
+    &damping, &model, &publisher_pos, &publisher_vel, &stiffness, &thread_data, &torques](
       const franka::RobotState& state, franka::Duration) -> franka::Torques {
 
         if (!thread_data.running) {
@@ -99,25 +99,15 @@ int main(int argc, const char** argv) {
         }
 
         if (thread_data.lock.try_lock()) {
-          if (thread_data.updated == true) {
-#ifdef REPORT_RATE
-            thread_data.counter++;
-#endif
-            std::array<double, 7> coriolis = model.coriolis(state);
-            for (size_t i = 0; i < 7; i++) {
-              torques[i] =
-                stiffness[i] *
-                (leader_pos[i] - state.q[i])
-                - damping[i] * state.dq[i] + coriolis[i];
-            }
-
-            //thread_data.updated = false;
-            thread_data.lock.unlock();
-            return torques;
+          std::array<double, 7> coriolis = model.coriolis(state);
+          for (size_t i = 0; i < 7; i++) {
+            torques[i] =
+              stiffness[i] *
+              (publisher_pos[i] - state.q[i])
+              - damping[i] * state.dq[i] + coriolis[i];
           }
           thread_data.lock.unlock();
         }
-
         return torques;
     };
 
@@ -137,33 +127,29 @@ int main(int argc, const char** argv) {
       initial_pos));
     std::cout << "Robot ready, press enter to start." << std::endl;
     std::cin.ignore();
-    
-    std::cout << "Waiting for first packet from leader..." << std::endl;
-    while (thread_data.running && !thread_data.first_packet_received) {
+
+    std::cout << "Waiting for first message from publisher." << std::endl;
+    while (thread_data.running && !thread_data.first_message_received) {
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    
+
     if (!thread_data.running) {
-      std::cout << "Stopped before receiving first packet." << std::endl;
+      std::cout << "Stopped before receiving first message." << std::endl;
       return EXIT_FAILURE;
     }
-    
+
     std::array<double, 7> first_position;
     {
       std::lock_guard<std::mutex> lock(thread_data.lock);
-      first_position = leader_pos;
+      first_position = publisher_pos;
     }
-    
-    std::cout << "Moving to first leader position..." << std::endl;
+
+    std::cout << "Moving to first position." << std::endl;
     robot.control(MotionGenerator(
       config["robot"]["initial_position"]["speed_factor"].as<double>(),
       first_position));
-    
-    std::cout << "Robot running, press CTRL-c to stop." << std::endl;
 
-#ifdef REPORT_RATE
-    std::thread report_thread(ReportThread{ "Subscriber", thread_data });
-#endif
+    std::cout << "Robot running, press CTRL-c to stop." << std::endl;
 
     const bool rate_limit = config["robot"]["rate_limit"].as<bool>();
     const double cutoff_freq = config["robot"]["cutoff_frequency"].as<double>();
@@ -192,12 +178,14 @@ int main(int argc, const char** argv) {
     if (subscribe_thread.joinable()) {
       subscribe_thread.join();
     }
-#ifdef REPORT_RATE
-    if (report_thread.joinable()) {
-      report_thread.join();
-    }
-#endif
+
     if (socket.is_open()) {
+      if (config["subscribe"]["multicast_host"]) {
+        socket.set_option(
+          asio::ip::multicast::leave_group(
+            asio::ip::address::from_string(
+              config["subscribe"]["multicast_host"].as<std::string>())));
+      }
       socket.close();
     }
 
