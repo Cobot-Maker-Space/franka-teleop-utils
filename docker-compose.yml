@@ -1,0 +1,4 @@
+services:
+  franka-teleop-utils:
+    build: .
+
