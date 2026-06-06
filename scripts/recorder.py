@@ -2,6 +2,7 @@ import argparse
 import pathlib
 import socket
 import struct
+import sys
 import threading
 import time
 
@@ -75,10 +76,10 @@ def record(
                             robot_state.joint7ExtTorque,
                         ]
 
-                        robot_data["packet_count"] += 1
+                        robot_data["message_count"] += 1
                 except Exception:
-                    # If decoding fails, just increment packet count
-                    robot_data["packet_count"] += 1
+                    # If decoding fails, just increment message count
+                    robot_data["message_count"] += 1
 
     except Exception as e:
         return
@@ -94,7 +95,7 @@ def display_status(shared_data: dict, is_running: Callable[[], bool]):
         print()
         for key in shared_data.keys():
             robot_data = shared_data[key]
-            print(f"Robot: {key} | Packets received: {robot_data["packet_count"]}")
+            print(f"Robot: {key} | Messages received: {robot_data["message_count"]}")
             print(
                 f"{'Joint':>8} {'Position (rad)':>15} {'Torque (Nm)':>15} {'Ext Torque (Nm)':>18}"
             )
@@ -108,13 +109,13 @@ def display_status(shared_data: dict, is_running: Callable[[], bool]):
         time.sleep(1 / 10)
 
 
-def main() -> None:
+def main(args: list[str]) -> None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument(
         "-r", "--robot", nargs="+", action="append"
     )  # name port path interface multicast_host
-    args = parser.parse_args()
-    for r in args.robot:
+    pargs = parser.parse_args(args)
+    for r in pargs.robot:
         l = len(r)
         if not (l == 3 or l == 5):
             parser.error("argument -r/--robot: expected either 3 or 5 arguments")
@@ -126,7 +127,7 @@ def main() -> None:
     def is_running() -> bool:
         return running
 
-    for r in args.robot:
+    for r in pargs.robot:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("", int(r[1])))
@@ -146,7 +147,7 @@ def main() -> None:
         if outfile.exists():
             raise SystemExit(f"File '{outfile}' already exists, exiting")
         robot_data = {
-            "packet_count": 0,
+            "message_count": 0,
             "joint_positions": [0.0] * 7,
             "joint_torques": [0.0] * 7,
             "external_torques": [0.0] * 7,
@@ -175,4 +176,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
