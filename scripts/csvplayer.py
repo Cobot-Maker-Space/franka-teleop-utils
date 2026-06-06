@@ -7,6 +7,8 @@ import time
 
 import capnp
 
+import readchar
+
 capnp.remove_import_hook()
 robotstate_capnp = capnp.load(
     str(
@@ -25,7 +27,8 @@ def play(file: pathlib.Path, frequency: int, host: str, port: int, skip_header: 
         if skip_header:
             next(csvreader)
 
-        first_row = True
+        manual = True
+        counter = 0
 
         state = robotstate_capnp.RobotState()
         state.joint1Vel = 0
@@ -50,7 +53,20 @@ def play(file: pathlib.Path, frequency: int, host: str, port: int, skip_header: 
         state.joint6ExtTorque = 0
         state.joint7ExtTorque = 0
 
+        # Clear screen and hide cursor
+        print("\033[2J\033[H\033[?25l")
+        print("Press SPACE to advance through the file, one line at a time.")
+        print("Press ENTER to automatically play the remainder of the file.")
         for row in csvreader:
+            if manual:
+                while True:
+                    k = readchar.readkey()
+                    if k == readchar.key.SPACE:
+                        break
+                    elif k == readchar.key.ENTER:
+                        manual = False
+                        break
+
             state.time = int(time.time() * 1000)
             state.joint1Pos = float(row[0])
             state.joint2Pos = float(row[1])
@@ -61,11 +77,11 @@ def play(file: pathlib.Path, frequency: int, host: str, port: int, skip_header: 
             state.joint7Pos = float(row[6])
 
             sock.sendto(state.to_bytes(), (host, port))
+            state.clear_write_flag()
+            counter += 1
+            print(f"\rMessages sent: {counter}", end="", flush=True)
 
-            if first_row:
-                input("First position sent, press enter to continue when ready")
-                first_row = False
-            else:
+            if not manual:
                 time.sleep(1 / frequency)
 
 
@@ -85,9 +101,13 @@ def main(args: list[str]):
     )
     parser.add_argument("csvfile", help="Path to CSV file to play from", type=str)
     pargs = parser.parse_args(args=args)
-    play(pargs.csvfile, pargs.frequency, pargs.host, pargs.port, pargs.skip_header)
+    try:
+        play(pargs.csvfile, pargs.frequency, pargs.host, pargs.port, pargs.skip_header)
+    except:
+        pass
+    print("\033[?25h")  # Show cursor
+    print("Playback complete")
 
 
-# TODO: Use readchar lib to interactively send messages
 if __name__ == "__main__":
-    main(sys.argv)
+    main(sys.argv[1:])
