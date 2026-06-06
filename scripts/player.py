@@ -1,6 +1,7 @@
 import argparse
 import pathlib
 import socket
+import sys
 import threading
 import time
 
@@ -43,7 +44,7 @@ def play(
         lasttime = basetime
         sock.sendto(buf, (host, port))
 
-        # Pause for 5 seconds after sending the first packet
+        # Pause for 5 seconds after sending the first message
         time.sleep(5)
 
         starttime = round(time.time() * 1000)
@@ -71,12 +72,12 @@ def display_status(counters: dict[str, int]):
         time.sleep(1 / 10)
 
 
-def main() -> None:
+def main(args: list[str]) -> None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument(
         "-r", "--robot", nargs=4, action="append"
     )  # name host port path
-    args = parser.parse_args()
+    pargs = parser.parse_args(args=args)
 
     threads: list[threading.Thread] = []
     counters: dict[str, int] = {}
@@ -86,7 +87,7 @@ def main() -> None:
     def is_running() -> bool:
         return running
 
-    for r in args.robot:
+    for r in pargs.robot:
         counters[r[0]] = 0
         threads.append(
             threading.Thread(
@@ -109,5 +110,6 @@ def main() -> None:
     print("Playback complete")
 
 
+# TODO: Use readchar lib to interactively send messages
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
