@@ -131,14 +131,13 @@ int main(int argc, const char** argv) {
                 stiffness[i] *
                 (leader_pos[i] - state.q[i])
                 - damping[i] * state.dq[i] + coriolis[i];
-              std::cout << "Torques: " << torques[1] << std::endl;
             }
 
-            sub_thread_data.updated = false;
             sub_thread_data.lock.unlock();
-            return torques;
           }
-          sub_thread_data.lock.unlock();
+          else {
+            sub_thread_data.lock.unlock();
+          }
         }
 
         if (pub_thread_data.lock.try_lock()) {
@@ -240,7 +239,7 @@ int main(int argc, const char** argv) {
     pub_report_thread.join();
   }
   if (sub_report_thread.joinable()) {
-    subscribe_thread.join();
+    sub_report_thread.join();
   }
 #endif
   if (sub_socket.is_open()) {
