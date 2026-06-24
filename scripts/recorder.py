@@ -13,7 +13,7 @@ import capnp
 capnp.remove_import_hook()
 robotstate_capnp = capnp.load("../messages/robot-state.capnp")
 
-VINCENT_PORT = 49186
+VINCENT_PORT = 49187
 BOB_PORT = 49188
 MESSAGE_SIZE = 248
 BASE_PATH = "../recordings"
