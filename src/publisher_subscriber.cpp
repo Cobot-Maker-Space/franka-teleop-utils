@@ -167,22 +167,37 @@ int main(int argc, const char** argv) {
         return torques;
     };
 
-  std::cout << "Press enter to move robot to the start position." << std::endl;
-  std::cin.ignore();
-  std::array<double, 7> initial_pos = { {
-    config["robot"]["initial_position"]["joint1"].as<double>(),
-    config["robot"]["initial_position"]["joint2"].as<double>(),
-    config["robot"]["initial_position"]["joint3"].as<double>(),
-    config["robot"]["initial_position"]["joint4"].as<double>(),
-    config["robot"]["initial_position"]["joint5"].as<double>(),
-    config["robot"]["initial_position"]["joint6"].as<double>(),
-    config["robot"]["initial_position"]["joint7"].as<double>()
-  } };
-  robot.control(MotionGenerator(
-    config["robot"]["initial_position"]["speed_factor"].as<double>(),
-    initial_pos));
+  if (should_home_on_start(config)) {
+    std::cout << "Press enter to move robot to the configured start position." << std::endl;
+    std::cin.ignore();
+    robot.control(MotionGenerator(
+      config["robot"]["initial_position"]["speed_factor"].as<double>(),
+      configured_initial_position(config)));
+  }
   std::cout << "Robot ready, press enter to start." << std::endl;
   std::cin.ignore();
+
+  std::cout << "Waiting for first packet from leader..." << std::endl;
+  while (sub_thread_data.running && !sub_thread_data.first_packet_received) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
+  if (!sub_thread_data.running) {
+    std::cout << "Stopped before receiving first packet." << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  std::array<double, 7> first_position;
+  {
+    std::lock_guard<std::mutex> lock(sub_thread_data.lock);
+    first_position = leader_pos;
+  }
+
+  std::cout << "Moving to first leader position..." << std::endl;
+  robot.control(MotionGenerator(
+    config["robot"]["initial_position"]["speed_factor"].as<double>(),
+    first_position));
+
   std::cout << "Robot running, press CTRL-c to stop." << std::endl;
 
 #ifdef REPORT_RATE

@@ -15,6 +15,11 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include <array>
+#include <atomic>
+#include <mutex>
+#include <thread>
+
 #include <asio.hpp>
 
 #include <capnp/serialize.h>
@@ -42,6 +47,10 @@ struct thread_data {
 void configure_robot(YAML::Node& config, franka::Robot& robot);
 
 YAML::Node parse_options(int, const char**);
+
+bool should_home_on_start(YAML::Node& config);
+
+std::array<double, 7> configured_initial_position(YAML::Node& config);
 
 class PublishThread {
 public:

@@ -110,20 +110,13 @@ int main(int argc, const char** argv) {
 			return torques;
 		};
 
-	std::cout << "Press enter to move robot to the start position." << std::endl;
-	std::cin.ignore();
-	std::array<double, 7> initial_pos = { {
-		config["robot"]["initial_position"]["joint1"].as<double>(),
-		config["robot"]["initial_position"]["joint2"].as<double>(),
-		config["robot"]["initial_position"]["joint3"].as<double>(),
-		config["robot"]["initial_position"]["joint4"].as<double>(),
-		config["robot"]["initial_position"]["joint5"].as<double>(),
-		config["robot"]["initial_position"]["joint6"].as<double>(),
-		config["robot"]["initial_position"]["joint7"].as<double>()
-	} };
-	robot.control(MotionGenerator(
-		config["robot"]["initial_position"]["speed_factor"].as<double>(),
-		initial_pos));
+	if (should_home_on_start(config)) {
+		std::cout << "Press enter to move robot to the configured start position." << std::endl;
+		std::cin.ignore();
+		robot.control(MotionGenerator(
+			config["robot"]["initial_position"]["speed_factor"].as<double>(),
+			configured_initial_position(config)));
+	}
 	std::cout << "Robot ready, press enter to start." << std::endl;
 	std::cin.ignore();
 	std::cout << "Robot running, press CTRL-c to stop." << std::endl;

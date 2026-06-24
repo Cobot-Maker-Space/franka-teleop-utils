@@ -21,15 +21,23 @@ Basic utility applications to support projects using Franka Emika Robots (née P
 ### Publisher (publisher.cpp)
 
 Publishes joint states and velocities from an arm.
+By default the arm starts publishing from its current position. Pass `--home`
+to first move to `robot.initial_position`.
 
 ### Subscriber (subscriber.cpp)
 
 Listens for updates from a publisher and attempts to apply the joint states to
 the connected arm.
+By default the arm waits for the first received packet, moves to that joint
+position, then starts following the stream. Pass `--home` to first move to
+`robot.initial_position` before waiting for the first packet.
 
 ### PublisherSubscriber (publisher_subscriber.cpp)
 
 Simulataneously publishes state whilst listening for and applying joint states.
+By default the arm waits for the first received packet, moves to that joint
+position, then starts following the stream. Pass `--home` to first move to
+`robot.initial_position` before waiting for the first packet.
 
 ### Grasp (grasp.cpp)
 
@@ -83,6 +91,12 @@ Takes a CSV file of joint positions (no header) and plays it back on an arm that
 ### player.py
 
 Used for Embrace Angels, takes two recordings and plays them back, one on each arm.
+The first pose is republished for five seconds by default before timed playback
+starts, giving subscribers time to move to the recording's start pose. Use
+`--start-hold-seconds` and `--start-hold-rate` to tune this. When playing back
+to a `publisher_subscriber`, use `--wait-for-start-feedback` to wait for robot
+state feedback to reach the first pose before timed playback starts; `--iface`,
+`--addr`, and `--maddr` select the feedback multicast interface.
 
 ### recorder.py
 

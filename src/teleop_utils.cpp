@@ -87,15 +87,37 @@ void configure_robot(YAML::Node& config, franka::Robot& robot) {
 YAML::Node parse_options(int argc, const char** argv) {
   cxxopts::Options options("sender", "Send robot state to receiver(s)");
   options.add_options()
-    ("c,config-file", "Path to configuration file", cxxopts::value<std::string>());
+    ("c,config-file", "Path to configuration file", cxxopts::value<std::string>())
+    ("home", "Move to robot.initial_position before starting",
+      cxxopts::value<bool>()->default_value("false")->implicit_value("true"));
   auto poptions = options.parse(argc, argv);
 
+  YAML::Node config;
   if (poptions.count("config-file")) {
-    return YAML::LoadFile(poptions["config-file"].as<std::string>());
+    config = YAML::LoadFile(poptions["config-file"].as<std::string>());
   }
   else {
-    return YAML::Load(std::cin);
+    config = YAML::Load(std::cin);
   }
+
+  config["runtime"]["home_on_start"] = poptions["home"].as<bool>();
+  return config;
+}
+
+bool should_home_on_start(YAML::Node& config) {
+  return config["runtime"]["home_on_start"].as<bool>();
+}
+
+std::array<double, 7> configured_initial_position(YAML::Node& config) {
+  return { {
+    config["robot"]["initial_position"]["joint1"].as<double>(),
+    config["robot"]["initial_position"]["joint2"].as<double>(),
+    config["robot"]["initial_position"]["joint3"].as<double>(),
+    config["robot"]["initial_position"]["joint4"].as<double>(),
+    config["robot"]["initial_position"]["joint5"].as<double>(),
+    config["robot"]["initial_position"]["joint6"].as<double>(),
+    config["robot"]["initial_position"]["joint7"].as<double>()
+  } };
 }
 
 void PublishThread::operator()() const {
