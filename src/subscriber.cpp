@@ -15,6 +15,8 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 
 #include <franka/exception.h>
@@ -28,6 +30,28 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 namespace {
   std::function<void(int)> stop;
   void signal_handler(int signal) { stop(signal); }
+
+  double max_joint_error(
+    const std::array<double, 7>& target,
+    const std::array<double, 7>& actual) {
+    double max_error = 0.0;
+    for (size_t i = 0; i < target.size(); i++) {
+      max_error = std::max(max_error, std::abs(target[i] - actual[i]));
+    }
+    return max_error;
+  }
+
+  std::array<double, 7> current_joint_position(const franka::RobotState& state) {
+    return { {
+      state.q[0],
+      state.q[1],
+      state.q[2],
+      state.q[3],
+      state.q[4],
+      state.q[5],
+      state.q[6]
+    } };
+  }
 }
 
 // TODO: Incorporate gripper state (if attached)
@@ -88,9 +112,15 @@ int main(int argc, const char** argv) {
     config["robot"]["damping"]["joint6"].as<double>(),
     config["robot"]["damping"]["joint7"].as<double>()} };
   std::array<double, 7> torques = { 0, 0, 0, 0, 0, 0, 0 };
+  std::atomic_bool reposition_requested{ false };
+  const double reposition_threshold =
+    config["robot"]["playback_reposition_threshold"]
+    ? config["robot"]["playback_reposition_threshold"].as<double>()
+    : 0.5;
 
   auto control_callback = [
-    &damping, &model, &leader_pos, &leader_vel, &stiffness, &thread_data, &torques](
+    &damping, &model, &leader_pos, &leader_vel, &reposition_requested,
+    &reposition_threshold, &stiffness, &thread_data, &torques](
       const franka::RobotState& state, franka::Duration) -> franka::Torques {
 
         if (!thread_data.running) {
@@ -100,6 +130,13 @@ int main(int argc, const char** argv) {
 
         if (thread_data.lock.try_lock()) {
           if (thread_data.updated == true) {
+            if (max_joint_error(leader_pos, current_joint_position(state)) > reposition_threshold) {
+              reposition_requested = true;
+              thread_data.lock.unlock();
+              return franka::MotionFinished(franka::Torques(
+                std::array<double, 7>{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}}));
+            }
+
 #ifdef REPORT_RATE
             thread_data.counter++;
 #endif
@@ -167,6 +204,20 @@ int main(int argc, const char** argv) {
     while (thread_data.running) {
       try {
         robot.control(control_callback, rate_limit, cutoff_freq);
+        if (reposition_requested && thread_data.running) {
+          std::array<double, 7> reposition_target;
+          {
+            std::lock_guard<std::mutex> lock(thread_data.lock);
+            reposition_target = leader_pos;
+          }
+          torques = { 0, 0, 0, 0, 0, 0, 0 };
+          reposition_requested = false;
+          std::cout << "Target jump detected, moving to new playback start position..." << std::endl;
+          robot.control(MotionGenerator(
+            config["robot"]["initial_position"]["speed_factor"].as<double>(),
+            reposition_target));
+          std::cout << "Playback following resumed." << std::endl;
+        }
       }
       catch (const franka::Exception& ex) {
         std::cerr << "Error: " << std::endl << ex.what() << std::endl;

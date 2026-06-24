@@ -156,7 +156,7 @@ void SubscribeThread::operator()() const {
     capnp::InputStreamMessageReader reader(in);
     RobotState::Reader state = reader.getRoot<RobotState>();
 
-    if (state.getTime() > last_received_time && thread_data.lock.try_lock()) {
+    if (state.getTime() != last_received_time && thread_data.lock.try_lock()) {
       thread_data.updated = true;
       last_received_time = state.getTime();
       leader_pos[0] = state.getJoint1Pos();

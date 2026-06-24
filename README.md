@@ -31,6 +31,10 @@ the connected arm.
 By default the arm waits for the first received packet, moves to that joint
 position, then starts following the stream. Pass `--home` to first move to
 `robot.initial_position` before waiting for the first packet.
+If a later target jumps farther than `robot.playback_reposition_threshold`
+radians from the current joint position, the torque loop pauses, moves to the
+new target with `MotionGenerator`, then resumes following. This lets batch
+playback move between recordings without restarting the subscriber.
 
 ### PublisherSubscriber (publisher_subscriber.cpp)
 
@@ -38,6 +42,8 @@ Simulataneously publishes state whilst listening for and applying joint states.
 By default the arm waits for the first received packet, moves to that joint
 position, then starts following the stream. Pass `--home` to first move to
 `robot.initial_position` before waiting for the first packet.
+It uses the same `robot.playback_reposition_threshold` jump handling as
+`subscriber`.
 
 ### Grasp (grasp.cpp)
 

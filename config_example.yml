@@ -13,6 +13,7 @@ robot:
     wait_time_ms: 500
   cutoff_frequency: 1000.0
   rate_limit: true
+  playback_reposition_threshold: 0.5
   initial_position:
     speed_factor: 0.5
     joint1: 0.0
@@ -84,4 +85,3 @@ robot:
     joint5: 30
     joint6: 25
     joint7: 15
-
