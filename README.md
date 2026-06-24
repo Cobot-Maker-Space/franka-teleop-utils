@@ -98,6 +98,20 @@ to a `publisher_subscriber`, use `--wait-for-start-feedback` to wait for robot
 state feedback to reach the first pose before timed playback starts; `--iface`,
 `--addr`, and `--maddr` select the feedback multicast interface.
 
+### batch_playback.py
+
+Plays multiple recordings sequentially from a text file containing one recording
+folder name per line. Blank lines and lines starting with `#` are ignored. It
+accepts the same arm-selection and first-pose hold/feedback options as
+`player.py`, plus `--pause-seconds` between recordings.
+
+### goto-last.py
+
+Publishes only the final pose from a recording, so a subscriber can move to the
+end position without replaying the whole file. Use `--bob-only` or
+`--vincent-only` to target one arm, and `--seconds` / `--rate` to tune how long
+the final pose is published.
+
 ### recorder.py
 
 Used for Embrace Angels, makes recordings from both arms.

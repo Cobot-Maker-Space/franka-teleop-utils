@@ -5,7 +5,13 @@ import threading
 import time
 from typing import List
 
-import player
+VINCENT_HOST = "224.3.29.71"
+VINCENT_PORT = 49185
+VINCENT_FEEDBACK_PORT = 49187
+BOB_HOST = "224.3.29.71"
+BOB_PORT = 49186
+BOB_FEEDBACK_PORT = 49188
+BASE_PATH = "recordings"
 
 
 def read_recording_names(list_file: pathlib.Path) -> List[str]:
@@ -23,10 +29,24 @@ def recording_path(recording: str) -> pathlib.Path:
     path = pathlib.Path(recording)
     if path.is_absolute():
         return path
-    return pathlib.Path(player.BASE_PATH, recording)
+    return pathlib.Path(BASE_PATH, recording)
 
 
-def run_threaded_playback(path: pathlib.Path, args):
+def import_player():
+    try:
+        import player
+    except ModuleNotFoundError as exc:
+        if exc.name != "capnp":
+            raise
+        print(
+            "Missing Python dependency 'capnp'. Install the script requirements before running batch playback.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return player
+
+
+def run_threaded_playback(player, path: pathlib.Path, args):
     errors = []
 
     def run_play(name, file, host, port, feedback_port):
@@ -59,9 +79,9 @@ def run_threaded_playback(path: pathlib.Path, args):
                 args=(
                     "Vincent",
                     pathlib.Path(path, "vincent"),
-                    player.VINCENT_HOST,
-                    player.VINCENT_PORT,
-                    player.VINCENT_FEEDBACK_PORT,
+                    VINCENT_HOST,
+                    VINCENT_PORT,
+                    VINCENT_FEEDBACK_PORT,
                 ),
             )
         )
@@ -73,9 +93,9 @@ def run_threaded_playback(path: pathlib.Path, args):
                 args=(
                     "Bob",
                     pathlib.Path(path, "bob"),
-                    player.BOB_HOST,
-                    player.BOB_PORT,
-                    player.BOB_FEEDBACK_PORT,
+                    BOB_HOST,
+                    BOB_PORT,
+                    BOB_FEEDBACK_PORT,
                 ),
             )
         )
@@ -143,7 +163,7 @@ def main(argv):
     )
     parser.add_argument(
         "--maddr",
-        default=player.VINCENT_HOST,
+        default=VINCENT_HOST,
         help="Feedback multicast address to join when using feedback wait",
     )
     parser.add_argument("-i", "--iface", help="Interface name for feedback multicast")
@@ -169,17 +189,22 @@ def main(argv):
     if not recordings:
         parser.error("list file does not contain any recordings")
 
+    playback_player = import_player()
     failed = []
     for index, recording in enumerate(recordings, start=1):
         path = recording_path(recording)
-        print(f"[{index}/{len(recordings)}] Playing {path}", flush=True)
+        started_at = time.strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[{index}/{len(recordings)}] {started_at} | playing {path}", flush=True)
         try:
-            run_threaded_playback(path, args)
+            run_threaded_playback(playback_player, path, args)
         except Exception as exc:
             print(f"Failed to play {recording}: {exc}", file=sys.stderr, flush=True)
             failed.append(recording)
             if not args.continue_on_error:
                 return 1
+        else:
+            finished_at = time.strftime("%Y-%m-%d %H:%M:%S")
+            print(f"[{index}/{len(recordings)}] {finished_at} | finished {path}", flush=True)
 
         if index < len(recordings) and args.pause_seconds > 0:
             time.sleep(args.pause_seconds)

@@ -55,6 +55,35 @@ def joint_positions(state):
     ]
 
 
+def decode_packet(buf: bytes):
+    with robotstate_capnp.RobotState.from_bytes(buf) as state:
+        return state.time, joint_positions(state)
+
+
+def read_next_valid_packet(f, name: str, file: pathlib.Path):
+    while True:
+        offset = f.tell()
+        buf = f.read(MESSAGE_SIZE)
+        if not buf:
+            return None
+        if len(buf) != MESSAGE_SIZE:
+            print(
+                f"{file} | {name} | skipped partial packet at byte {offset}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return None
+        try:
+            timestamp, positions = decode_packet(buf)
+            return offset, buf, timestamp, positions
+        except Exception as exc:
+            print(
+                f"{file} | {name} | skipped invalid packet at byte {offset}: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+
+
 def make_feedback_socket(
     port: int,
     multicast_addr: str,
@@ -150,12 +179,13 @@ def play(
 ):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     with open(file, "rb") as f:
-        buf = f.read(MESSAGE_SIZE)
-        with robotstate_capnp.RobotState.from_bytes(buf) as state:
-            basetime = state.time
-            target_positions = joint_positions(state)
+        first_packet = read_next_valid_packet(f, name, file)
+        if first_packet is None:
+            raise ValueError(f"{file} does not contain any valid robot-state packets")
+
+        _, buf, basetime, target_positions = first_packet
         lasttime = basetime
-        print(f"{lasttime}: {name}", flush=True)
+        print(f"{file} | {name} | robot_time={lasttime}", flush=True)
         sock.sendto(buf, (host, port))
 
         if wait_for_feedback:
@@ -183,17 +213,22 @@ def play(
                 time.sleep(hold_interval)
 
         starttime = round(time.time() * 1000)
-        while buf := f.read(MESSAGE_SIZE):
-            with robotstate_capnp.RobotState.from_bytes(buf) as state:
-                if state.time < lasttime:
-                    continue
-                timediff = state.time - basetime
-                now = round(time.time() * 1000)
-                if starttime + timediff > now:
-                    time.sleep(((starttime + timediff) - now) / 1000)
-                lasttime = state.time
-                sock.sendto(buf, (host, port))
-                print(f"{lasttime}: {name}", flush=True)
+        while True:
+            packet = read_next_valid_packet(f, name, file)
+            if packet is None:
+                break
+
+            _, buf, timestamp, _ = packet
+            if timestamp < lasttime:
+                continue
+
+            timediff = timestamp - basetime
+            now = round(time.time() * 1000)
+            if starttime + timediff > now:
+                time.sleep(((starttime + timediff) - now) / 1000)
+            lasttime = timestamp
+            sock.sendto(buf, (host, port))
+            print(f"{file} | {name} | robot_time={lasttime}", flush=True)
 
 
 def main(argv):
