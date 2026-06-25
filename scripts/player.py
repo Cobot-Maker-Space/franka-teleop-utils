@@ -4,8 +4,10 @@ import socket
 import struct
 import sys
 import argparse
+import termios
 import threading
 import time
+import tty
 
 from ipaddress import IPv4Address
 from typing import Optional
@@ -24,6 +26,70 @@ BOB_FEEDBACK_PORT = 49188
 MESSAGE_SIZE = 248
 #BASE_PATH = "/Users/pszdp1/Library/CloudStorage/OneDrive-TheUniversityofNottingham/Development/embrace-angels/eapy/recordings"
 BASE_PATH = "recordings"
+
+
+class PauseController:
+    def __init__(self, enabled: bool = True, hold_rate: float = 20.0):
+        self.enabled = enabled and sys.stdin.isatty()
+        self.hold_rate = hold_rate
+        self.paused = threading.Event()
+        self.stop_requested = threading.Event()
+        self._thread = None
+        self._terminal_settings = None
+
+    def start(self):
+        if not self.enabled or self._thread is not None:
+            return
+
+        self._terminal_settings = termios.tcgetattr(sys.stdin)
+        tty.setcbreak(sys.stdin.fileno())
+        self._thread = threading.Thread(target=self._listen, daemon=True)
+        self._thread.start()
+        print("Press SPACE to pause/resume playback.", flush=True)
+
+    def stop(self):
+        self.stop_requested.set()
+        if self.enabled and self._terminal_settings is not None:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self._terminal_settings)
+
+    def _listen(self):
+        while not self.stop_requested.is_set():
+            char = sys.stdin.read(1)
+            if char == " ":
+                if self.paused.is_set():
+                    self.paused.clear()
+                    print("Playback resumed.", flush=True)
+                else:
+                    self.paused.set()
+                    print("Playback paused. Press SPACE to resume.", flush=True)
+
+    def wait_if_paused(self, hold_callback=None):
+        if not self.enabled or not self.paused.is_set():
+            return 0.0
+
+        paused_at = time.monotonic()
+        hold_interval = 1.0 / self.hold_rate
+        next_hold = 0.0
+        while self.paused.is_set() and not self.stop_requested.is_set():
+            now = time.monotonic()
+            if hold_callback and now >= next_hold:
+                hold_callback()
+                next_hold = now + hold_interval
+            time.sleep(0.01)
+        return time.monotonic() - paused_at
+
+
+def sleep_with_pause(seconds: float, pause_controller: Optional[PauseController], hold_callback=None):
+    end_time = time.monotonic() + seconds
+    paused_seconds = 0.0
+    while time.monotonic() < end_time:
+        if pause_controller:
+            paused = pause_controller.wait_if_paused(hold_callback)
+            if paused:
+                paused_seconds += paused
+                end_time += paused
+        time.sleep(min(0.02, max(0.0, end_time - time.monotonic())))
+    return paused_seconds
 
 
 def get_most_recent(base_path):
@@ -176,6 +242,7 @@ def play(
     start_tolerance: float,
     start_stable_seconds: float,
     start_timeout: float,
+    pause_controller: Optional[PauseController] = None,
 ):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     with open(file, "rb") as f:
@@ -187,6 +254,7 @@ def play(
         lasttime = basetime
         print(f"{file} | {name} | robot_time={lasttime}", flush=True)
         sock.sendto(buf, (host, port))
+        last_sent_buf = buf
 
         if wait_for_feedback:
             wait_for_start_feedback(
@@ -209,8 +277,12 @@ def play(
             hold_interval = 1.0 / start_hold_rate
             hold_until = time.monotonic() + start_hold_seconds
             while time.monotonic() < hold_until:
-                sock.sendto(buf, (host, port))
-                time.sleep(hold_interval)
+                sock.sendto(last_sent_buf, (host, port))
+                sleep_with_pause(
+                    hold_interval,
+                    pause_controller,
+                    lambda: sock.sendto(last_sent_buf, (host, port)),
+                )
 
         starttime = round(time.time() * 1000)
         while True:
@@ -223,11 +295,24 @@ def play(
                 continue
 
             timediff = timestamp - basetime
-            now = round(time.time() * 1000)
-            if starttime + timediff > now:
-                time.sleep(((starttime + timediff) - now) / 1000)
+            while True:
+                paused_seconds = (
+                    pause_controller.wait_if_paused(lambda: sock.sendto(last_sent_buf, (host, port)))
+                    if pause_controller
+                    else 0.0
+                )
+                if paused_seconds:
+                    starttime += round(paused_seconds * 1000)
+
+                now = round(time.time() * 1000)
+                target_time = starttime + timediff
+                if target_time <= now:
+                    break
+                time.sleep(min((target_time - now) / 1000, 0.02))
+
             lasttime = timestamp
             sock.sendto(buf, (host, port))
+            last_sent_buf = buf
             print(f"{file} | {name} | robot_time={lasttime}", flush=True)
 
 
@@ -278,6 +363,17 @@ def main(argv):
     )
     parser.add_argument("-i", "--iface", help="Interface name for feedback multicast")
     parser.add_argument("-a", "--addr", help="Local interface IP address for feedback multicast")
+    parser.add_argument(
+        "--no-keyboard-pause",
+        action="store_true",
+        help="Disable SPACE pause/resume handling",
+    )
+    parser.add_argument(
+        "--pause-hold-rate",
+        type=float,
+        default=20.0,
+        help="Rate in Hz for republishing the current pose while paused",
+    )
     args = parser.parse_args(argv[1:])
 
     if args.start_hold_seconds < 0:
@@ -290,6 +386,8 @@ def main(argv):
         parser.error("--start-stable-seconds must be >= 0")
     if args.start_timeout <= 0:
         parser.error("--start-timeout must be > 0")
+    if args.pause_hold_rate <= 0:
+        parser.error("--pause-hold-rate must be > 0")
 
     if args.recording:
         if args.recording == "r":
@@ -300,6 +398,11 @@ def main(argv):
         path = get_most_recent(BASE_PATH)
 
     threads = []
+    pause_controller = PauseController(
+        enabled=not args.no_keyboard_pause,
+        hold_rate=args.pause_hold_rate,
+    )
+    pause_controller.start()
 
     # Add Vincent thread unless bob-only flag is specified
     if not args.bob_only:
@@ -321,6 +424,7 @@ def main(argv):
                     args.start_tolerance,
                     args.start_stable_seconds,
                     args.start_timeout,
+                    pause_controller,
                 ),
             )
         )
@@ -345,14 +449,18 @@ def main(argv):
                     args.start_tolerance,
                     args.start_stable_seconds,
                     args.start_timeout,
+                    pause_controller,
                 ),
             )
         )
 
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    finally:
+        pause_controller.stop()
 
 
 if __name__ == "__main__":

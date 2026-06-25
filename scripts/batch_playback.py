@@ -66,6 +66,7 @@ def run_threaded_playback(player, path: pathlib.Path, args):
                 args.start_tolerance,
                 args.start_stable_seconds,
                 args.start_timeout,
+                args.pause_controller,
             )
         except Exception as exc:
             errors.append((name, exc))
@@ -168,6 +169,17 @@ def main(argv):
     )
     parser.add_argument("-i", "--iface", help="Interface name for feedback multicast")
     parser.add_argument("-a", "--addr", help="Local interface IP address for feedback multicast")
+    parser.add_argument(
+        "--no-keyboard-pause",
+        action="store_true",
+        help="Disable SPACE pause/resume handling",
+    )
+    parser.add_argument(
+        "--pause-hold-rate",
+        type=float,
+        default=20.0,
+        help="Rate in Hz for republishing the current pose while paused",
+    )
     args = parser.parse_args(argv[1:])
 
     if args.bob_only and args.vincent_only:
@@ -184,30 +196,43 @@ def main(argv):
         parser.error("--start-stable-seconds must be >= 0")
     if args.start_timeout <= 0:
         parser.error("--start-timeout must be > 0")
+    if args.pause_hold_rate <= 0:
+        parser.error("--pause-hold-rate must be > 0")
 
     recordings = read_recording_names(pathlib.Path(args.list_file))
     if not recordings:
         parser.error("list file does not contain any recordings")
 
     playback_player = import_player()
+    args.pause_controller = playback_player.PauseController(
+        enabled=not args.no_keyboard_pause,
+        hold_rate=args.pause_hold_rate,
+    )
+    args.pause_controller.start()
     failed = []
-    for index, recording in enumerate(recordings, start=1):
-        path = recording_path(recording)
-        started_at = time.strftime("%Y-%m-%d %H:%M:%S")
-        print(f"[{index}/{len(recordings)}] {started_at} | playing {path}", flush=True)
-        try:
-            run_threaded_playback(playback_player, path, args)
-        except Exception as exc:
-            print(f"Failed to play {recording}: {exc}", file=sys.stderr, flush=True)
-            failed.append(recording)
-            if not args.continue_on_error:
-                return 1
-        else:
-            finished_at = time.strftime("%Y-%m-%d %H:%M:%S")
-            print(f"[{index}/{len(recordings)}] {finished_at} | finished {path}", flush=True)
+    try:
+        for index, recording in enumerate(recordings, start=1):
+            path = recording_path(recording)
+            started_at = time.strftime("%Y-%m-%d %H:%M:%S")
+            print(f"[{index}/{len(recordings)}] {started_at} | playing {path}", flush=True)
+            try:
+                run_threaded_playback(playback_player, path, args)
+            except Exception as exc:
+                print(f"Failed to play {recording}: {exc}", file=sys.stderr, flush=True)
+                failed.append(recording)
+                if not args.continue_on_error:
+                    return 1
+            else:
+                finished_at = time.strftime("%Y-%m-%d %H:%M:%S")
+                print(f"[{index}/{len(recordings)}] {finished_at} | finished {path}", flush=True)
 
-        if index < len(recordings) and args.pause_seconds > 0:
-            time.sleep(args.pause_seconds)
+            if index < len(recordings) and args.pause_seconds > 0:
+                playback_player.sleep_with_pause(
+                    args.pause_seconds,
+                    args.pause_controller,
+                )
+    finally:
+        args.pause_controller.stop()
 
     if failed:
         print("Failed recordings: " + ", ".join(failed), file=sys.stderr, flush=True)
