@@ -119,8 +119,8 @@ whole batch.
 
 Publishes only the final pose from a recording, so a subscriber can move to the
 end position without replaying the whole file. Use `--bob-only` or
-`--vincent-only` to target one arm, and `--seconds` / `--rate` to tune how long
-the final pose is published.
+`--vincent-only` to target one arm. By default it sends the final recorded packet
+once; use `--repeat-seconds` / `--repeat-rate` to resend it on lossy networks.
 
 ### recorder.py
 
