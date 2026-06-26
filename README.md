@@ -60,7 +60,7 @@ Common code for other components.
 ## Message Format
 
 [CapnProto](https://capnproto.org/) is used for message serialisation/deserialisation
-during transmission and recording. See [messages/robot-state.capnp](messages/robot-state.capnp) for the message structure. Each message is 136 bytes.
+during transmission and recording. See [messages/robot-state.capnp](messages/robot-state.capnp) for the message structure. Each message is 248 bytes.
 
 ## Configuration
 
@@ -89,6 +89,34 @@ These scripts were written quickly for the Embrace Angels contemporary deploymen
 ### convert.py
 
 Takes a Cap'n'Proto encoded recording file and dumps it to CSV.
+
+### visualize_recording.py
+
+Plots the 6 or 7 recorded joint positions over elapsed recording time, plus an
+optional max-joint-speed subplot to help identify low-movement trim regions at
+the start or end of a file. It reads the same fixed-size Cap'n'Proto packet
+format used by playback, so any later trimming script should cut only on
+248-byte packet boundaries.
+
+Examples:
+
+* `python3 scripts/visualize_recording.py recordings/250626120000`
+* `python3 scripts/visualize_recording.py recordings/250626120000 --bob-only`
+* `python3 scripts/visualize_recording.py recordings/250626120000/vincent --six-joints`
+* `python3 scripts/visualize_recording.py recordings/250626120000 --output trim-review.png`
+
+### trim_recording.py
+
+Trims one or more elapsed-time ranges from a Cap'n'Proto encoded recording file
+or a recording folder containing `bob` and `vincent` files. By default it
+compacts packet timestamps after removed ranges, which prevents playback pauses
+when trimming from the middle of a recording.
+
+Examples:
+
+* `python3 scripts/trim_recording.py recordings/source recordings/source-trimmed --trim 0-10 --trim 47-57`
+* `python3 scripts/trim_recording.py recordings/source/bob recordings/source-bob-trimmed --trim 0-10`
+* `python3 scripts/trim_recording.py recordings/source recordings/source-trimmed --bob-only --trim 104-112`
 
 ### kplayer.py
 
