@@ -131,6 +131,8 @@ starts, giving subscribers time to move to the recording's start pose. Use
 to a `publisher_subscriber`, use `--wait-for-start-feedback` to wait for robot
 state feedback to reach the first pose before timed playback starts; `--iface`,
 `--addr`, and `--maddr` select the feedback multicast interface.
+Use `--start-position 30` to skip the first 30 seconds of a recording and use
+the first packet at or after that elapsed time as the initial pose.
 Press space in the terminal to pause or resume playback. While paused, the
 current target pose is republished so the subscriber holds position. Use
 `--no-keyboard-pause` to disable this.
@@ -140,8 +142,10 @@ current target pose is republished so the subscriber holds position. Use
 Plays multiple recordings sequentially from a text file containing one recording
 folder name per line. Blank lines and lines starting with `#` are ignored. It
 accepts the same arm-selection and first-pose hold/feedback options as
-`player.py`, plus `--pause-seconds` between recordings. Space pauses/resumes the
-whole batch.
+`player.py`, plus `--pause-seconds` between recordings. For batch playback,
+`--start-position` is a single offset into the combined batch timeline: earlier
+recordings are skipped and playback starts partway through the recording where
+that elapsed time lands. Space pauses/resumes the whole batch.
 
 ### goto-last.py
 

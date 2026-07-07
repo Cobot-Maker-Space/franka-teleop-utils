@@ -46,7 +46,24 @@ def import_player():
     return player
 
 
-def run_threaded_playback(player, path: pathlib.Path, args):
+def selected_recording_files(path: pathlib.Path, args):
+    files = []
+    if not args.bob_only:
+        files.append(("Vincent", pathlib.Path(path, "vincent")))
+    if not args.vincent_only:
+        files.append(("Bob", pathlib.Path(path, "bob")))
+    return files
+
+
+def recording_duration_seconds(player, path: pathlib.Path, args):
+    durations = [
+        player.recording_duration_seconds(file, name)
+        for name, file in selected_recording_files(path, args)
+    ]
+    return max(durations)
+
+
+def run_threaded_playback(player, path: pathlib.Path, args, start_position_seconds: float):
     errors = []
 
     def run_play(name, file, host, port, feedback_port):
@@ -66,6 +83,7 @@ def run_threaded_playback(player, path: pathlib.Path, args):
                 args.start_tolerance,
                 args.start_stable_seconds,
                 args.start_timeout,
+                start_position_seconds,
                 args.pause_controller,
             )
         except Exception as exc:
@@ -163,6 +181,12 @@ def main(argv):
         help="Maximum seconds to wait for start feedback",
     )
     parser.add_argument(
+        "--start-position",
+        type=float,
+        default=0.0,
+        help="Elapsed combined batch time in seconds to start playback from",
+    )
+    parser.add_argument(
         "--maddr",
         default=VINCENT_HOST,
         help="Feedback multicast address to join when using feedback wait",
@@ -196,6 +220,8 @@ def main(argv):
         parser.error("--start-stable-seconds must be >= 0")
     if args.start_timeout <= 0:
         parser.error("--start-timeout must be > 0")
+    if args.start_position < 0:
+        parser.error("--start-position must be >= 0")
     if args.pause_hold_rate <= 0:
         parser.error("--pause-hold-rate must be > 0")
 
@@ -210,19 +236,40 @@ def main(argv):
     )
     args.pause_controller.start()
     failed = []
+    remaining_start_position = args.start_position
+    played_any = False
     try:
         for index, recording in enumerate(recordings, start=1):
             path = recording_path(recording)
             started_at = time.strftime("%Y-%m-%d %H:%M:%S")
-            print(f"[{index}/{len(recordings)}] {started_at} | playing {path}", flush=True)
             try:
-                run_threaded_playback(playback_player, path, args)
+                playback_start_position = 0.0
+                if remaining_start_position > 0:
+                    duration = recording_duration_seconds(playback_player, path, args)
+                    if remaining_start_position >= duration:
+                        print(
+                            f"[{index}/{len(recordings)}] {started_at} | skipping {path} "
+                            f"({duration:.3f}s before requested start)",
+                            flush=True,
+                        )
+                        remaining_start_position -= duration
+                        continue
+                    playback_start_position = remaining_start_position
+                    remaining_start_position = 0.0
+
+                print(
+                    f"[{index}/{len(recordings)}] {started_at} | playing {path} "
+                    f"from {playback_start_position:.3f}s",
+                    flush=True,
+                )
+                run_threaded_playback(playback_player, path, args, playback_start_position)
             except Exception as exc:
                 print(f"Failed to play {recording}: {exc}", file=sys.stderr, flush=True)
                 failed.append(recording)
                 if not args.continue_on_error:
                     return 1
             else:
+                played_any = True
                 finished_at = time.strftime("%Y-%m-%d %H:%M:%S")
                 print(f"[{index}/{len(recordings)}] {finished_at} | finished {path}", flush=True)
 
@@ -236,6 +283,14 @@ def main(argv):
 
     if failed:
         print("Failed recordings: " + ", ".join(failed), file=sys.stderr, flush=True)
+        return 1
+    if not played_any:
+        print(
+            f"No recording was played; --start-position {args.start_position:.3f}s "
+            "is at or after the end of the batch.",
+            file=sys.stderr,
+            flush=True,
+        )
         return 1
 
     return 0

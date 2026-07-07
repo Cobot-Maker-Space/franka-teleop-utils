@@ -150,6 +150,60 @@ def read_next_valid_packet(f, name: str, file: pathlib.Path):
             )
 
 
+def read_start_packet(f, name: str, file: pathlib.Path, start_position_seconds: float):
+    first_packet = read_next_valid_packet(f, name, file)
+    if first_packet is None:
+        return None
+
+    if start_position_seconds == 0:
+        return first_packet
+
+    _, _, recording_start_time, _ = first_packet
+    start_timestamp = recording_start_time + round(start_position_seconds * 1000)
+    packet = first_packet
+    while packet is not None:
+        _, _, timestamp, _ = packet
+        if timestamp >= start_timestamp:
+            skipped_seconds = (timestamp - recording_start_time) / 1000.0
+            print(
+                f"{file} | {name} | skipped to {skipped_seconds:.3f}s "
+                f"(requested {start_position_seconds:.3f}s)",
+                flush=True,
+            )
+            return packet
+        packet = read_next_valid_packet(f, name, file)
+
+    return None
+
+
+def packet_time_bounds(file: pathlib.Path, name: str):
+    with open(file, "rb") as f:
+        first_packet = read_next_valid_packet(f, name, file)
+        if first_packet is None:
+            return None
+
+        _, _, first_timestamp, _ = first_packet
+        last_timestamp = first_timestamp
+        while True:
+            packet = read_next_valid_packet(f, name, file)
+            if packet is None:
+                break
+            _, _, timestamp, _ = packet
+            if timestamp >= first_timestamp:
+                last_timestamp = max(last_timestamp, timestamp)
+
+        return first_timestamp, last_timestamp
+
+
+def recording_duration_seconds(file: pathlib.Path, name: str):
+    bounds = packet_time_bounds(file, name)
+    if bounds is None:
+        raise ValueError(f"{file} does not contain any valid robot-state packets")
+
+    start_timestamp, end_timestamp = bounds
+    return max(0.0, (end_timestamp - start_timestamp) / 1000.0)
+
+
 def make_feedback_socket(
     port: int,
     multicast_addr: str,
@@ -242,13 +296,17 @@ def play(
     start_tolerance: float,
     start_stable_seconds: float,
     start_timeout: float,
+    start_position_seconds: float,
     pause_controller: Optional[PauseController] = None,
 ):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     with open(file, "rb") as f:
-        first_packet = read_next_valid_packet(f, name, file)
+        first_packet = read_start_packet(f, name, file, start_position_seconds)
         if first_packet is None:
-            raise ValueError(f"{file} does not contain any valid robot-state packets")
+            raise ValueError(
+                f"{file} does not contain a valid robot-state packet at or after "
+                f"{start_position_seconds:.3f}s"
+            )
 
         _, buf, basetime, target_positions = first_packet
         lasttime = basetime
@@ -357,6 +415,12 @@ def main(argv):
         help="Maximum seconds to wait for start feedback",
     )
     parser.add_argument(
+        "--start-position",
+        type=float,
+        default=0.0,
+        help="Elapsed recording time in seconds to start playback from",
+    )
+    parser.add_argument(
         "--maddr",
         default=VINCENT_HOST,
         help="Feedback multicast address to join when using feedback wait",
@@ -386,6 +450,8 @@ def main(argv):
         parser.error("--start-stable-seconds must be >= 0")
     if args.start_timeout <= 0:
         parser.error("--start-timeout must be > 0")
+    if args.start_position < 0:
+        parser.error("--start-position must be >= 0")
     if args.pause_hold_rate <= 0:
         parser.error("--pause-hold-rate must be > 0")
 
@@ -424,6 +490,7 @@ def main(argv):
                     args.start_tolerance,
                     args.start_stable_seconds,
                     args.start_timeout,
+                    args.start_position,
                     pause_controller,
                 ),
             )
@@ -449,6 +516,7 @@ def main(argv):
                     args.start_tolerance,
                     args.start_stable_seconds,
                     args.start_timeout,
+                    args.start_position,
                     pause_controller,
                 ),
             )
